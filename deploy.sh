@@ -43,13 +43,13 @@ sudo docker compose up -d --build
 
 # 6. Execute Database Migrations and Collectstatic inside container
 echo "🗄️ Running Django Database Migrations on Supabase..."
-sudo docker compose exec -T web python manage.py migrate --noinput
+sudo docker compose exec web python manage.py migrate --noinput
 
 echo "🌱 Seeding initial market data and admin superuser..."
-sudo docker compose exec -T web python manage.py seed_data || true
+sudo docker compose exec web python manage.py seed_data || true
 
 echo "📁 Collecting static files..."
-sudo docker compose exec -T web python manage.py collectstatic --noinput
+sudo docker compose exec web python manage.py collectstatic --noinput
 
 # 7. Configure Nginx Reverse Proxy
 echo "🌐 Configuring Nginx Reverse Proxy for matkaresult.kingwins.pro..."

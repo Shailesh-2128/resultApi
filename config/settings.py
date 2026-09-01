@@ -69,8 +69,11 @@ if DATABASE_URL and not TESTING:
             default=DATABASE_URL,
             conn_max_age=600,
             conn_health_checks=True,
+            ssl_require=True,
         )
     }
+    DATABASES['default']['OPTIONS'] = DATABASES['default'].get('OPTIONS', {})
+    DATABASES['default']['OPTIONS']['connect_timeout'] = 10
 else:
     DATABASES = {
         'default': {
