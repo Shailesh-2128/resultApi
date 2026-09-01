@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - ResultHub{% endblock %}
+
+{% block content %}
+<section class="py-5">
+    <div class="container" style="max-width: 650px;">
+        <div class="d-flex align-items-center gap-3 mb-4">
+            <a href="{% url 'markets:dashboard' %}" class="btn btn-outline-secondary btn-sm rounded-circle">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <h1 class="h3 fw-bold text-white mb-0">{{ title }}</h1>
+        </div>
+
+        <div class="market-card p-4 p-md-5">
+            <form method="POST">
+                {% csrf_token %}
+                
+                <div class="mb-3">
+                    <label class="form-label text-secondary fw-semibold">Target Market</label>
+                    {{ form.market }}
+                    {% if form.market.errors %}
+                        <div class="text-danger small mt-1">{{ form.market.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-secondary fw-semibold">Result Date</label>
+                        {{ form.result_date }}
+                        {% if form.result_date.errors %}
+                            <div class="text-danger small mt-1">{{ form.result_date.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-secondary fw-semibold">Result Declaration Type</label>
+                        {{ form.result_type }}
+                        {% if form.result_type.errors %}
+                            <div class="text-danger small mt-1">{{ form.result_type.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label text-secondary fw-semibold">Declared Result Value</label>
+                    {{ form.result_value }}
+                    {% if form.result_value.errors %}
+                        <div class="text-danger small mt-1">{{ form.result_value.errors.0 }}</div>
+                    {% endif %}
+                    <div class="form-text text-secondary">Formatted string format (e.g. <code>170-8</code> or <code>170-89-450</code>).</div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{% url 'markets:dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-info px-4">Save Result</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}

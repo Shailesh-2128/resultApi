@@ -1,0 +1,15 @@
+[Unit]
+Description=Celery Beat Scheduler service for Results Management Application
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/results_project
+ExecStart=/var/www/results_project/venv/bin/celery -A config beat -l info
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+*.pyc
+__pycache__/
+*.sqlite3
+*.db
+.env
+venv/
+env/
+logs/*.log
+!logs/.gitkeep
+.dockerignore
+dist/
+build/
+.pytest_cache/

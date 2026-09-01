@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+
+{% block title %}Results History - {{ target_date|date:"d M Y" }} - ResultHub{% endblock %}
+
+{% block content %}
+<div {% if is_today %}data-page="today-results"{% endif %}>
+    <!-- Date Header & Picker -->
+    <section class="py-4 border-bottom border-dark border-opacity-50 bg-dark bg-opacity-25">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6 mb-3 mb-md-0">
+                    <span class="badge bg-secondary mb-1">
+                        {% if is_today %}<i class="bi bi-clock-history text-success me-1"></i> Today's Live Feed{% else %}<i class="bi bi-archive me-1"></i> Historical Archive{% endif %}
+                    </span>
+                    <h1 class="h3 fw-bold text-white mb-0">
+                        Results for {{ target_date|date:"d F Y" }}
+                    </h1>
+                </div>
+                <div class="col-md-6">
+                    <form method="GET" action="{% url 'markets:date_results' %}" class="d-flex gap-2 justify-md-content-end">
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary text-secondary">
+                                <i class="bi bi-calendar3"></i>
+                            </span>
+                            <input type="date" name="date" value="{{ target_date|date:'Y-m-d' }}" class="form-control bg-dark border-secondary text-white">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Filter Date</button>
+                        <a href="{% url 'markets:today_results' %}" class="btn btn-outline-secondary" title="Reset to Today">Today</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Results Display -->
+    <section class="py-5">
+        <div class="container">
+            {% if daily_results %}
+                <div class="row g-4">
+                    {% for item in daily_results %}
+                        <div class="col-md-6 col-lg-4">
+                            <div class="market-card p-4 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h5 class="fw-bold text-white mb-0">
+                                        <a href="{% url 'markets:market_detail' slug=item.slug %}" class="text-white text-decoration-none">
+                                            {{ item.market }}
+                                        </a>
+                                    </h5>
+                                    <small class="text-secondary">{{ target_date|date:"d/m/Y" }}</small>
+                                </div>
+
+                                <!-- Open Result -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="text-secondary small">Open Result ({{ item.open_time }})</span>
+                                        <span id="open-badge-{{ item.slug }}" class="result-badge {% if item.open %}badge-success{% elif item.open_status == 'FETCHING' %}badge-updating{% elif item.open_status == 'FAILED' or item.open_status == 'TIMEOUT' %}badge-unavailable{% else %}badge-waiting{% endif %}">
+                                            {% if item.open %}Available{% elif item.open_status == 'FETCHING' %}Updating{% elif item.open_status == 'FAILED' or item.open_status == 'TIMEOUT' %}Error{% else %}Waiting{% endif %}
+                                        </span>
+                                    </div>
+                                    <div class="result-box">
+                                        <span id="open-val-{{ item.slug }}" class="result-value">
+                                            {% if item.open %}
+                                                {{ item.open }}
+                                            {% elif item.open_status == 'FETCHING' %}
+                                                Updating...
+                                            {% elif item.open_status == 'FAILED' or item.open_status == 'TIMEOUT' %}
+                                                Temporarily unavailable
+                                            {% else %}
+                                                Waiting for result
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Close Result -->
+                                <div>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="text-secondary small">Close Result ({{ item.close_time }})</span>
+                                        <span id="close-badge-{{ item.slug }}" class="result-badge {% if item.close %}badge-success{% elif item.close_status == 'FETCHING' %}badge-updating{% elif item.close_status == 'FAILED' or item.close_status == 'TIMEOUT' %}badge-unavailable{% else %}badge-waiting{% endif %}">
+                                            {% if item.close %}Available{% elif item.close_status == 'FETCHING' %}Updating{% elif item.close_status == 'FAILED' or item.close_status == 'TIMEOUT' %}Error{% else %}Waiting{% endif %}
+                                        </span>
+                                    </div>
+                                    <div class="result-box">
+                                        <span id="close-val-{{ item.slug }}" class="result-value">
+                                            {% if item.close %}
+                                                {{ item.close }}
+                                            {% elif item.close_status == 'FETCHING' %}
+                                                Updating...
+                                            {% elif item.close_status == 'FAILED' or item.close_status == 'TIMEOUT' %}
+                                                Temporarily unavailable
+                                            {% else %}
+                                                Waiting for result
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-calendar-x text-secondary display-4 mb-3 d-block"></i>
+                    <h4 class="text-white">No Results Found for {{ target_date|date:"d M Y" }}</h4>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+</div>
+{% endblock %}
