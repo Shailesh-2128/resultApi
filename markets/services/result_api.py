@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 import requests
 from django.conf import settings
@@ -13,9 +14,11 @@ class ResultAPIClient:
     """
     Client for interacting with external Matka API (https://www.matkaapi.com/mapi/market_api.php).
     Implements:
-    1. Local 45-second response caching (matches Matka API 45s cache to prevent flood auto-block).
-    2. Enforced 10-second gap lock per request to prevent HTTP 429 rate limit errors.
-    3. Handles 'cached: true' payloads and 15-minute flood auto-block protection.
+    1. Local 45-second response caching for valid results.
+    2. Enforced 5-second gap lock per request.
+    3. Strict Regex format validation:
+       - OPEN: 3-digit number - 1 digit number (e.g. 234-9)
+       - CLOSE: 3-digit number - 2-digit number - 3-digit number (e.g. 234-99-289)
     """
 
     def __init__(self, api_url=None, api_key=None, api_domain=None, connect_timeout=5, read_timeout=10):
@@ -26,18 +29,18 @@ class ResultAPIClient:
         self.session = requests.Session()
 
     def _enforce_rate_limit(self):
-        """Enforces a minimum 10-second gap between outbound API calls to comply with Matka API rules"""
+        """Enforces a minimum 5-second gap between outbound API calls to comply with rate rules"""
         if getattr(settings, 'TESTING', False):
             return
 
         global _last_request_timestamp
         now = time.time()
         elapsed = now - _last_request_timestamp
-        min_gap = 10.0  # 10 seconds gap required by matkaapi.com
+        min_gap = float(getattr(settings, 'RESULT_POLL_INTERVAL', 5.0))
 
         if elapsed < min_gap and _last_request_timestamp > 0:
             wait_time = min_gap - elapsed
-            logger.info(f"Enforcing Matka API rate limit: sleeping {wait_time:.1f}s to maintain 10s gap")
+            logger.info(f"Enforcing Matka API rate limit: sleeping {wait_time:.1f}s to maintain {min_gap}s gap")
             time.sleep(wait_time)
 
         _last_request_timestamp = time.time()
@@ -151,8 +154,8 @@ class ResultAPIClient:
                     "response_status": status_code,
                     "error": f"Matka API: {msg_str}"
                 }
-                # Cache negative response for 30s to prevent spamming
-                cache.set(cache_key, res_dict, timeout=30)
+                # Cache negative response for 5s to match 5-second polling interval
+                cache.set(cache_key, res_dict, timeout=5)
                 return res_dict
 
             else:
@@ -186,7 +189,7 @@ class ResultAPIClient:
 
     def _fetch_all_markets_fallback(self, external_name: str, result_date_str: str, result_type: str, headers: dict) -> dict:
         """
-        Fallback search querying market=all with 45-second cache and 10-second rate limit.
+        Fallback search querying market=all with 45-second cache and 5-second rate limit.
         """
         all_cache_key = f"matka_api_cache_all_{result_date_str}"
         all_data = cache.get(all_cache_key)
@@ -221,16 +224,17 @@ class ResultAPIClient:
         return {"success": True, "available": False, "result_value": None, "response_status": 200, "error": "Not found"}
 
     def _process_raw_result(self, raw_result: str, result_type: str, status_code: int) -> dict:
-        if not raw_result or '*' in raw_result or raw_result in ['- -', '-']:
+        raw_str = str(raw_result).strip() if raw_result else ''
+        if not raw_str or '*' in raw_str or raw_str.lower() in ['- -', '-', 'loading', 'loading...']:
             return {
                 "success": True,
                 "available": False,
                 "result_value": None,
                 "response_status": status_code,
-                "error": "Result not declared yet by market provider"
+                "error": "Result loading... / not declared yet by market provider"
             }
 
-        parsed_val = self._parse_matka_result(raw_result, result_type)
+        parsed_val = self._parse_matka_result(raw_str, result_type)
         if parsed_val:
             return {
                 "success": True,
@@ -244,21 +248,36 @@ class ResultAPIClient:
             "available": False,
             "result_value": None,
             "response_status": status_code,
-            "error": f"{result_type} result not available in declaration: '{raw_result}'"
+            "error": f"{result_type} result loading... / format not valid yet: '{raw_result}'"
         }
 
-    def _parse_matka_result(self, raw_result: str, result_type: str) -> str:
-        parts = raw_result.split('-')
+    def _parse_matka_result(self, raw_result: str, result_type: str):
+        if not raw_result:
+            return None
+
+        clean_raw = raw_result.strip()
+        parts = clean_raw.split('-')
+
         if result_type in ['OPEN', 'FIRST']:
+            # Open result format must strictly be 3 digits - 1 digit e.g. 234-9
             if len(parts) >= 2:
-                return f"{parts[0]}-{parts[1][0]}"
-            return raw_result
+                p0 = parts[0].strip()
+                p1 = parts[1].strip()
+                if p0 and p1:
+                    candidate = f"{p0}-{p1[0]}"
+                    if re.match(r'^\d{3}-\d$', candidate):
+                        return candidate
+            elif len(parts) == 1:
+                candidate = parts[0].strip()
+                if re.match(r'^\d{3}-\d$', candidate):
+                    return candidate
+            return None
         else:
-            if len(parts) == 3:
-                return raw_result
-            elif len(parts) == 2:
-                return raw_result
-            return raw_result
+            # Close result format must strictly be 3 digits - 2 digits - 3 digits e.g. 234-99-289
+            candidate = clean_raw
+            if re.match(r'^\d{3}-\d{2}-\d{3}$', candidate):
+                return candidate
+            return None
 
     def _mock_response(self, external_name: str, result_date_str: str, result_type: str) -> dict:
         hash_val = abs(hash(f"{external_name}-{result_date_str}-{result_type}"))

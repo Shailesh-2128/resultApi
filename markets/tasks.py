@@ -47,7 +47,7 @@ def check_and_schedule_result_fetches(self):
 def _should_trigger_fetch(market, target_date, result_type: str) -> bool:
     """
     Determines whether a fetch task should be queued.
-    Returns False if result already exists in DB or if fetch attempt is in SUCCESS/TIMEOUT state.
+    Returns False if result already exists in DB or if fetch is actively running right now.
     """
     # 1. If result exists, do not trigger
     if Result.objects.filter(market=market, result_date=target_date, result_type=result_type).exists():
@@ -56,21 +56,21 @@ def _should_trigger_fetch(market, target_date, result_type: str) -> bool:
     # 2. Check FetchAttempt state
     attempt = FetchAttempt.objects.filter(market=market, result_date=target_date, result_type=result_type).first()
     if attempt:
-        if attempt.status in [FetchStatus.SUCCESS, FetchStatus.TIMEOUT]:
+        if attempt.status == FetchStatus.SUCCESS:
             return False
-        # Avoid queuing duplicate tasks if fetch is actively running right now
+        # Avoid queuing duplicate tasks if fetch is actively running right now within poll interval
         if attempt.status == FetchStatus.FETCHING:
-            poll_interval = getattr(settings, 'RESULT_POLL_INTERVAL', 15)
+            poll_interval = getattr(settings, 'RESULT_POLL_INTERVAL', 5)
             if attempt.last_attempt_at and (timezone.now() - attempt.last_attempt_at).total_seconds() < poll_interval:
                 return False
 
     return True
 
 
-@shared_task(bind=True, max_retries=100, default_retry_delay=15, name='markets.tasks.fetch_market_result_task')
+@shared_task(bind=True, max_retries=None, default_retry_delay=5, name='markets.tasks.fetch_market_result_task')
 def fetch_market_result_task(self, market_id: int, result_date_str: str, result_type: str):
     """
-    Celery background worker task for polling external API for a specific result.
+    Celery background worker task for polling external API continuously for a specific result.
     """
     logger.info(f"Executing fetch_market_result_task for market_id={market_id}, date={result_date_str}, type={result_type}")
     
@@ -84,16 +84,11 @@ def fetch_market_result_task(self, market_id: int, result_date_str: str, result_
     res = fetcher.process_fetch(market_id, target_date, result_type)
 
     status = res.get('status')
-    poll_interval = getattr(settings, 'RESULT_POLL_INTERVAL', 15)
+    poll_interval = getattr(settings, 'RESULT_POLL_INTERVAL', 5)
 
-    if status in [FetchStatus.NOT_AVAILABLE, FetchStatus.FAILED]:
-        # Enforce at least 15 seconds retry countdown to respect 10s gap rule of matkaapi.com
-        retry_delay = max(15, poll_interval)
-        logger.info(f"Result not ready/rate-limited for market_id={market_id} [{result_date_str} {result_type}]. Scheduling retry in {retry_delay}s")
-        try:
-            raise self.retry(countdown=retry_delay)
-        except self.MaxRetriesExceededError:
-            logger.warning(f"Max retries exceeded for task market_id={market_id} [{result_date_str} {result_type}]")
-            return "Max retries exceeded"
+    if status in [FetchStatus.NOT_AVAILABLE, FetchStatus.FAILED, FetchStatus.TIMEOUT]:
+        retry_delay = max(5, poll_interval)
+        logger.info(f"Result not ready/loading for market_id={market_id} [{result_date_str} {result_type}]. Scheduling retry in {retry_delay}s")
+        raise self.retry(countdown=retry_delay)
 
     return f"Fetch completed with status: {status}"

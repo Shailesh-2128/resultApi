@@ -137,9 +137,9 @@ RESULT_API_KEY = config('RESULT_API_KEY', default='')
 RESULT_API_DOMAIN = config('RESULT_API_DOMAIN', default='')
 
 # Polling Rules
-RESULT_POLL_INTERVAL = config('RESULT_POLL_INTERVAL', default=15, cast=int)
-RESULT_MAX_POLL_MINUTES = config('RESULT_MAX_POLL_MINUTES', default=30, cast=int)
-RESULT_MAX_RETRIES = config('RESULT_MAX_RETRIES', default=100, cast=int)
+RESULT_POLL_INTERVAL = config('RESULT_POLL_INTERVAL', default=5, cast=int)
+RESULT_MAX_POLL_MINUTES = config('RESULT_MAX_POLL_MINUTES', default=None, cast=lambda v: int(v) if v else None)
+RESULT_MAX_RETRIES = config('RESULT_MAX_RETRIES', default=None, cast=lambda v: int(v) if v else None)
 
 # Celery Configuration
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://redis:6379/0')

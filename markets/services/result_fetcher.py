@@ -72,18 +72,18 @@ class ResultFetcherService:
 
             now = timezone.now()
 
-            # Check timeout condition: max poll minutes exceeded since first attempt
-            max_minutes = getattr(settings, 'RESULT_MAX_POLL_MINUTES', 30)
-            max_retries = getattr(settings, 'RESULT_MAX_RETRIES', 100)
+            # Check timeout condition only if max limits are explicitly set (not None/disabled)
+            max_minutes = getattr(settings, 'RESULT_MAX_POLL_MINUTES', None)
+            max_retries = getattr(settings, 'RESULT_MAX_RETRIES', None)
 
-            if attempt.created_at and (now - attempt.created_at) > timedelta(minutes=max_minutes):
+            if max_minutes and attempt.created_at and (now - attempt.created_at) > timedelta(minutes=max_minutes):
                 attempt.status = FetchStatus.TIMEOUT
                 attempt.error_message = f"Maximum polling window of {max_minutes} minutes exceeded."
                 attempt.save()
                 logger.warning(f"Polling timeout reached for {market.name} [{date_str} {result_type}]")
                 return {"status": FetchStatus.TIMEOUT, "message": attempt.error_message}
 
-            if attempt.attempt_count >= max_retries:
+            if max_retries and attempt.attempt_count >= max_retries:
                 attempt.status = FetchStatus.TIMEOUT
                 attempt.error_message = f"Maximum retry limit of {max_retries} attempts reached."
                 attempt.save()
@@ -94,7 +94,7 @@ class ResultFetcherService:
             attempt.status = FetchStatus.FETCHING
             attempt.attempt_count += 1
             attempt.last_attempt_at = now
-            poll_interval = getattr(settings, 'RESULT_POLL_INTERVAL', 15)
+            poll_interval = getattr(settings, 'RESULT_POLL_INTERVAL', 5)
             attempt.next_attempt_at = now + timedelta(seconds=poll_interval)
             attempt.save()
 
