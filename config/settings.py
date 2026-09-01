@@ -13,6 +13,21 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-fallback-key-chan
 DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,*', cast=Csv())
 
+# Security & CSRF Trusted Origins for HTTPS Deployment
+CSRF_TRUSTED_ORIGINS = [
+    'https://matkaresult.kingwins.pro',
+    'http://matkaresult.kingwins.pro',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
+csrf_origins_env = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
+if csrf_origins_env:
+    for origin in csrf_origins_env:
+        if origin and origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(origin)
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
