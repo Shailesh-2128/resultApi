@@ -6,11 +6,30 @@
 <section class="py-5">
     <div class="container" style="max-width: 650px;">
         <div class="d-flex align-items-center gap-3 mb-4">
-            <a href="{% url 'markets:dashboard' %}" class="btn btn-outline-secondary btn-sm rounded-circle">
+            <a href="{% url 'markets:result_manage' %}{% if target_date %}?date={{ target_date|date:'Y-m-d' }}{% endif %}" class="btn btn-outline-secondary btn-sm rounded-circle">
                 <i class="bi bi-arrow-left"></i>
             </a>
-            <h1 class="h3 fw-bold mb-0">{{ title }}</h1>
+            <div>
+                <h1 class="h3 fw-bold mb-0">{{ title }}</h1>
+                {% if target_date %}
+                    <div class="small text-body-secondary">Targeting Date: <strong>{{ target_date|date:"F d, Y" }}</strong></div>
+                {% endif %}
+            </div>
         </div>
+
+        {% if existing_result %}
+            <div class="alert alert-info border d-flex justify-content-between align-items-center mb-4" role="alert">
+                <div>
+                    <i class="bi bi-info-circle me-2"></i> Existing declared result found:
+                    <strong class="ms-1">{{ existing_result.result_value }}</strong>
+                    <span class="badge bg-secondary ms-2">{{ existing_result.source }}</span>
+                </div>
+                <form method="POST" action="{% url 'markets:result_delete' pk=existing_result.pk %}" onsubmit="return confirm('Are you sure you want to delete this declared result?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger btn-sm px-2 py-1">Delete</button>
+                </form>
+            </div>
+        {% endif %}
 
         <div class="market-card p-4 p-md-5">
             <form method="POST">
@@ -47,11 +66,16 @@
                     {% if form.result_value.errors %}
                         <div class="text-danger small mt-1">{{ form.result_value.errors.0 }}</div>
                     {% endif %}
-                    <div class="form-text text-body-secondary">e.g. <code>170-8</code> for Open Result or <code>170-89-450</code> for Close Result.</div>
+                    <div class="form-text text-body-secondary mt-2">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Open Result format: <code>170-8</code> (3 digits - 1 digit)<br>
+                        <i class="bi bi-info-circle me-1"></i>
+                        Close Result format: <code>170-89-450</code> (3 digits - 2 digits - 3 digits)
+                    </div>
                 </div>
 
                 <div class="d-flex justify-content-end gap-2">
-                    <a href="{% url 'markets:dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+                    <a href="{% url 'markets:result_manage' %}{% if target_date %}?date={{ target_date|date:'Y-m-d' }}{% endif %}" class="btn btn-outline-secondary">Cancel</a>
                     <button type="submit" class="btn btn-primary px-4">Save Manual Declaration</button>
                 </div>
             </form>
@@ -59,3 +83,4 @@
     </div>
 </section>
 {% endblock %}
+

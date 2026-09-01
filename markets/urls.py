@@ -17,6 +17,8 @@ urlpatterns = [
     path('dashboard/markets/<int:pk>/toggle/', views.MarketToggleActiveView.as_view(), name='market_toggle'),
     path('dashboard/markets/<int:pk>/delete/', views.MarketDeleteView.as_view(), name='market_delete'),
     path('dashboard/results/add/', views.ManualResultCreateView.as_view(), name='result_create'),
+    path('dashboard/results/manage/', views.DateResultManageView.as_view(), name='result_manage'),
+    path('dashboard/results/delete/<int:pk>/', views.ManualResultDeleteView.as_view(), name='result_delete'),
     path('dashboard/markets/<int:pk>/fetch/', views.TriggerFetchView.as_view(), name='trigger_fetch'),
 
     # REST API endpoints (prefixed with api/ inside this router)

@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+
+{% block title %}Date Result Manager - {{ target_date }} - ResultHub{% endblock %}
+
+{% block content %}
+<!-- Section Header -->
+<section class="py-4 border-bottom bg-body-tertiary">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill mb-1">
+                    <i class="bi bi-calendar-event me-1"></i> Result Management
+                </span>
+                <h1 class="h3 fw-bold mb-0">Date-wise Results Manager</h1>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'markets:dashboard' %}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                    <i class="bi bi-speedometer2 me-1"></i> Admin Dashboard
+                </a>
+                <a href="{% url 'markets:result_create' %}?date={{ target_date|date:'Y-m-d' }}" class="btn btn-primary btn-sm rounded-pill px-3">
+                    <i class="bi bi-plus-lg me-1"></i> Add Manual Result
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Messages Alert -->
+<div class="container mt-4">
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show border text-body" role="alert">
+                <i class="bi bi-info-circle me-2"></i> {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+</div>
+
+<!-- Date Navigation & Picker Bar -->
+<section class="py-3">
+    <div class="container">
+        <div class="market-card p-3">
+            <form method="GET" action="{% url 'markets:result_manage' %}" class="row g-3 align-items-center">
+                <div class="col-auto">
+                    <label class="fw-bold text-body-secondary col-form-label"><i class="bi bi-calendar3 me-1"></i> Select Date:</label>
+                </div>
+                <div class="col-auto">
+                    <input type="date" name="date" class="form-control theme-input" value="{{ target_date|date:'Y-m-d' }}" onchange="this.form.submit()">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-outline-primary btn-sm px-3">Go</button>
+                </div>
+                <div class="col-auto ms-auto d-flex gap-2">
+                    <a href="{% url 'markets:result_manage' %}?date={{ prev_date|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-chevron-left me-1"></i> {{ prev_date|date:'M d' }}
+                    </a>
+                    <a href="{% url 'markets:result_manage' %}?date={{ today_date|date:'Y-m-d' }}" class="btn {% if is_today %}btn-primary{% else %}btn-outline-primary{% endif %} btn-sm">
+                        Today ({{ today_date|date:'M d' }})
+                    </a>
+                    <a href="{% url 'markets:result_manage' %}?date={{ next_date|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">
+                        {{ next_date|date:'M d' }} <i class="bi bi-chevron-right ms-1"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<!-- Results Management Table -->
+<section class="py-4">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="h5 fw-bold mb-0">
+                <i class="bi bi-list-check me-2"></i> Results for {{ target_date|date:"F d, Y" }}
+            </h4>
+            <span class="badge bg-secondary bg-opacity-10 text-secondary border px-3 py-2 rounded-pill">
+                {{ market_rows|length }} Active Markets
+            </span>
+        </div>
+
+        <div class="card border overflow-hidden">
+            <div class="table-responsive">
+                <table class="table theme-table table-hover align-middle mb-0">
+                    <thead>
+                        <tr class="small">
+                            <th class="py-3 px-4" style="width: 22%;">Market Name</th>
+                            <th style="width: 32%;">Open Result (3 digits-1 digit)</th>
+                            <th style="width: 32%;">Close Result (3-2-3 digits)</th>
+                            <th class="text-end px-4" style="width: 14%;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in market_rows %}
+                            <tr>
+                                <!-- Market info -->
+                                <td class="py-3 px-4">
+                                    <div class="fw-bold text-body">{{ row.market.name }}</div>
+                                    <div class="small text-body-secondary">
+                                        <code>{{ row.market.external_name }}</code>
+                                        <span class="ms-1">({{ row.market.open_time|time:"H:i" }} - {{ row.market.close_time|time:"H:i" }})</span>
+                                    </div>
+                                </td>
+
+                                <!-- Open Result -->
+                                <td>
+                                    {% if row.open_result %}
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fs-6 px-3 py-2">
+                                                {{ row.open_result.result_value }}
+                                            </span>
+                                            <span class="badge {% if row.open_result.source == 'Manual' %}bg-warning text-dark{% else %}bg-info text-dark{% endif %} text-uppercase small">
+                                                {{ row.open_result.source }}
+                                            </span>
+                                            <form method="POST" action="{% url 'markets:result_delete' pk=row.open_result.pk %}" class="d-inline" onsubmit="return confirm('Clear Open result for {{ row.market.name|escapejs }}?');">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-link text-danger p-0 border-0 ms-1" title="Delete Open Result">
+                                                    <i class="bi bi-x-circle"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    {% else %}
+                                        <form method="POST" action="{% url 'markets:result_manage' %}" class="d-flex gap-2 align-items-center">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="market_id" value="{{ row.market.id }}">
+                                            <input type="hidden" name="result_date" value="{{ target_date|date:'Y-m-d' }}">
+                                            <input type="hidden" name="result_type" value="OPEN">
+                                            <input type="text" name="result_value" class="form-control form-control-sm theme-input" placeholder="e.g. 170-8" style="max-width: 140px;" required>
+                                            <button type="submit" class="btn btn-outline-success btn-sm px-2" title="Save Open Result">
+                                                <i class="bi bi-check-lg"></i> Set
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+
+                                <!-- Close Result -->
+                                <td>
+                                    {% if row.close_result %}
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fs-6 px-3 py-2">
+                                                {{ row.close_result.result_value }}
+                                            </span>
+                                            <span class="badge {% if row.close_result.source == 'Manual' %}bg-warning text-dark{% else %}bg-info text-dark{% endif %} text-uppercase small">
+                                                {{ row.close_result.source }}
+                                            </span>
+                                            <form method="POST" action="{% url 'markets:result_delete' pk=row.close_result.pk %}" class="d-inline" onsubmit="return confirm('Clear Close result for {{ row.market.name|escapejs }}?');">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-link text-danger p-0 border-0 ms-1" title="Delete Close Result">
+                                                    <i class="bi bi-x-circle"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    {% else %}
+                                        <form method="POST" action="{% url 'markets:result_manage' %}" class="d-flex gap-2 align-items-center">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="market_id" value="{{ row.market.id }}">
+                                            <input type="hidden" name="result_date" value="{{ target_date|date:'Y-m-d' }}">
+                                            <input type="hidden" name="result_type" value="CLOSE">
+                                            <input type="text" name="result_value" class="form-control form-control-sm theme-input" placeholder="e.g. 170-89-450" style="max-width: 160px;" required>
+                                            <button type="submit" class="btn btn-outline-primary btn-sm px-2" title="Save Close Result">
+                                                <i class="bi bi-check-lg"></i> Set
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+
+                                <!-- Actions -->
+                                <td class="text-end px-4">
+                                    <div class="d-inline-flex gap-1">
+                                        <a href="{% url 'markets:result_create' %}?date={{ target_date|date:'Y-m-d' }}&market={{ row.market.id }}" class="btn btn-outline-secondary btn-sm" title="Advanced Edit Form">
+                                            <i class="bi bi-pencil-square"></i> Form
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-body-secondary">No active markets available.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

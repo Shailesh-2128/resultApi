@@ -3,14 +3,14 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.views import View
 from django.core.paginator import Paginator
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, Sum, F
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.contrib import messages
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Market, Result, FetchAttempt, FetchStatus, ResultType
+from .models import Market, Result, FetchAttempt, FetchStatus, ResultType, DailyAPIHit
 from .serializers import MarketSerializer, ResultSerializer, MarketDayResultsSerializer
 from .forms import MarketForm, ManualResultForm
 from .tasks import fetch_market_result_task
@@ -20,6 +20,25 @@ def get_current_app_date():
     """Helper to get current date in configured application timezone"""
     current_tz = timezone.get_current_timezone()
     return timezone.now().astimezone(current_tz).date()
+
+
+def record_api_hit(endpoint_name):
+    """Atomically increment the API hit count for today's date"""
+    try:
+        today = get_current_app_date()
+        updated = DailyAPIHit.objects.filter(endpoint=endpoint_name, hit_date=today).update(
+            count=F('count') + 1,
+            last_hit_at=timezone.now()
+        )
+        if not updated:
+            DailyAPIHit.objects.get_or_create(
+                endpoint=endpoint_name,
+                hit_date=today,
+                defaults={'count': 1}
+            )
+    except Exception:
+        pass
+
 
 
 def build_daily_market_results(target_date):
@@ -182,11 +201,16 @@ class DashboardView(StaffRequiredMixin, View):
         recent_results = Result.objects.select_related('market').order_by('-fetched_at')[:15]
         recent_attempts = FetchAttempt.objects.select_related('market').order_by('-updated_at')[:20]
 
+        today_hits = DailyAPIHit.objects.filter(endpoint='/api/results/all/', hit_date=today).aggregate(total=Sum('count'))['total'] or 0
+        total_hits = DailyAPIHit.objects.filter(endpoint='/api/results/all/').aggregate(total=Sum('count'))['total'] or 0
+
         stats = {
             'total_markets': markets.count(),
             'active_markets': markets.filter(is_active=True).count(),
             'today_success': Result.objects.filter(result_date=today).count(),
             'failed_attempts': FetchAttempt.objects.filter(result_date=today, status=FetchStatus.FAILED).count(),
+            'today_api_hits': today_hits,
+            'total_api_hits': total_hits,
         }
 
         context = {
@@ -251,8 +275,44 @@ class MarketDeleteView(StaffRequiredMixin, View):
 
 class ManualResultCreateView(StaffRequiredMixin, View):
     def get(self, request):
-        form = ManualResultForm(initial={'result_date': get_current_app_date()})
-        return render(request, 'dashboard/result_form.html', {'form': form, 'title': 'Manually Add/Edit Result'})
+        today = get_current_app_date()
+        date_param = request.GET.get('date')
+        market_id = request.GET.get('market')
+        result_type = request.GET.get('type')
+
+        target_date = today
+        if date_param:
+            try:
+                target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+
+        initial = {'result_date': target_date}
+        if market_id:
+            initial['market'] = market_id
+        if result_type:
+            initial['result_type'] = result_type
+
+        # Check if an existing result matches the initial criteria to pre-fill
+        existing_result = None
+        if market_id and result_type:
+            existing_result = Result.objects.filter(
+                market_id=market_id,
+                result_date=target_date,
+                result_type=result_type
+            ).first()
+            if existing_result:
+                initial['result_value'] = existing_result.result_value
+
+        form = ManualResultForm(initial=initial)
+        context = {
+            'form': form,
+            'title': 'Manually Add / Edit Result',
+            'target_date': target_date,
+            'existing_result': existing_result,
+            'active_tab': 'dashboard',
+        }
+        return render(request, 'dashboard/result_form.html', context)
 
     def post(self, request):
         form = ManualResultForm(request.POST)
@@ -285,20 +345,182 @@ class ManualResultCreateView(StaffRequiredMixin, View):
             )
 
             action_str = "created" if created else "updated"
-            messages.success(request, f"Result for {market.name} [{result_date} {result_type}] successfully {action_str}: {result_value}")
-            return redirect('markets:dashboard')
-        return render(request, 'dashboard/result_form.html', {'form': form, 'title': 'Manually Add/Edit Result'})
+            messages.success(request, f"Manual result for {market.name} [{result_date} {result_type}] successfully {action_str}: {result_value}")
+            return redirect(f"{redirect('markets:result_manage').url}?date={result_date}")
+        
+        return render(request, 'dashboard/result_form.html', {
+            'form': form,
+            'title': 'Manually Add / Edit Result',
+            'active_tab': 'dashboard',
+        })
+
+
+class ManualResultDeleteView(StaffRequiredMixin, View):
+    def post(self, request, pk):
+        result = get_object_or_404(Result, pk=pk)
+        market_name = result.market.name
+        result_date = result.result_date
+        result_type = result.result_type
+
+        # Update fetch attempt status back to WAITING or NOT_AVAILABLE
+        FetchAttempt.objects.filter(
+            market=result.market,
+            result_date=result_date,
+            result_type=result_type
+        ).update(
+            status=FetchStatus.WAITING,
+            error_message="Manual result was removed by administrator."
+        )
+
+        result.delete()
+        messages.info(request, f"Manual result for {market_name} [{result_date} {result_type}] was deleted.")
+        return redirect(f"{redirect('markets:result_manage').url}?date={result_date}")
+
+
+class DateResultManageView(StaffRequiredMixin, View):
+    """
+    Dedicated Date-wise Result Management view allowing admins to select any date
+    and quickly add, edit, or delete Open/Close results across all active markets.
+    """
+    def get(self, request):
+        today = get_current_app_date()
+        date_str = request.GET.get('date')
+
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                target_date = today
+        else:
+            target_date = today
+
+        from datetime import timedelta
+        prev_date = target_date - timedelta(days=1)
+        next_date = target_date + timedelta(days=1)
+
+        markets = Market.objects.filter(is_active=True).order_by('name')
+        results = Result.objects.filter(result_date=target_date).select_related('market')
+        attempts = FetchAttempt.objects.filter(result_date=target_date).select_related('market')
+
+        results_map = {(r.market_id, r.result_type): r for r in results}
+        attempts_map = {(a.market_id, a.result_type): a for a in attempts}
+
+        market_rows = []
+        for m in markets:
+            open_res = results_map.get((m.id, ResultType.OPEN))
+            close_res = results_map.get((m.id, ResultType.CLOSE))
+            open_att = attempts_map.get((m.id, ResultType.OPEN))
+            close_att = attempts_map.get((m.id, ResultType.CLOSE))
+
+            market_rows.append({
+                'market': m,
+                'open_result': open_res,
+                'close_result': close_res,
+                'open_attempt': open_att,
+                'close_attempt': close_att,
+            })
+
+        context = {
+            'target_date': target_date,
+            'today_date': today,
+            'prev_date': prev_date,
+            'next_date': next_date,
+            'is_today': (target_date == today),
+            'market_rows': market_rows,
+            'result_types': ResultType,
+            'active_tab': 'dashboard',
+        }
+        return render(request, 'dashboard/result_manage.html', context)
+
+    def post(self, request):
+        """Quick inline form submission from Date Management page"""
+        market_id = request.POST.get('market_id')
+        date_str = request.POST.get('result_date')
+        result_type = request.POST.get('result_type')
+        result_value = (request.POST.get('result_value') or '').strip()
+
+        if not market_id or not date_str or not result_type:
+            messages.error(request, "Missing required parameters for result declaration.")
+            return redirect('markets:result_manage')
+
+        market = get_object_or_404(Market, pk=market_id)
+        try:
+            result_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            messages.error(request, "Invalid date format.")
+            return redirect('markets:result_manage')
+
+        if not result_value:
+            # If value is empty, treat as delete request if existing
+            existing = Result.objects.filter(market=market, result_date=result_date, result_type=result_type).first()
+            if existing:
+                existing.delete()
+                FetchAttempt.objects.filter(market=market, result_date=result_date, result_type=result_type).update(
+                    status=FetchStatus.WAITING,
+                    error_message="Manual result cleared by admin."
+                )
+                messages.info(request, f"Cleared {result_type} result for {market.name} [{result_date}].")
+            return redirect(f"{redirect('markets:result_manage').url}?date={result_date}")
+
+        # Basic Format Validation check for quick inline entry
+        import re
+        if result_type == ResultType.OPEN and not re.match(r'^\d{3}-\d$', result_value):
+            messages.error(request, f"Invalid Open Result format '{result_value}'. Must be like '170-8'.")
+            return redirect(f"{redirect('markets:result_manage').url}?date={result_date}")
+        elif result_type == ResultType.CLOSE and not re.match(r'^\d{3}-\d{2}-\d{3}$', result_value):
+            messages.error(request, f"Invalid Close Result format '{result_value}'. Must be like '170-89-450'.")
+            return redirect(f"{redirect('markets:result_manage').url}?date={result_date}")
+
+        # Save Result
+        res_obj, created = Result.objects.update_or_create(
+            market=market,
+            result_date=result_date,
+            result_type=result_type,
+            defaults={
+                'result_value': result_value,
+                'source': 'Manual',
+                'fetched_at': timezone.now()
+            }
+        )
+
+        FetchAttempt.objects.update_or_create(
+            market=market,
+            result_date=result_date,
+            result_type=result_type,
+            defaults={
+                'status': FetchStatus.SUCCESS,
+                'last_attempt_at': timezone.now(),
+                'error_message': None
+            }
+        )
+
+        action = "added" if created else "updated"
+        messages.success(request, f"Successfully {action} {result_type} result for {market.name} [{result_date}]: {result_value}")
+        return redirect(f"{redirect('markets:result_manage').url}?date={result_date}")
 
 
 class TriggerFetchView(StaffRequiredMixin, View):
     def post(self, request, pk):
         market = get_object_or_404(Market, pk=pk)
         result_type = request.POST.get('result_type', ResultType.OPEN)
+        date_str = request.POST.get('result_date')
+        
         today = get_current_app_date()
+        target_date = today
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
 
-        fetch_market_result_task.delay(market.id, str(today), result_type)
-        messages.success(request, f"Triggered background fetch for {market.name} [{today} {result_type}]. Check status table below.")
+        fetch_market_result_task.delay(market.id, str(target_date), result_type)
+        messages.success(request, f"Triggered background fetch for {market.name} [{target_date} {result_type}]. Check status table below.")
+        
+        redirect_to_manage = request.POST.get('redirect_to_manage')
+        if redirect_to_manage:
+            return redirect(f"{redirect('markets:result_manage').url}?date={target_date}")
         return redirect('markets:dashboard')
+
 
 
 # ==========================================
@@ -311,6 +533,7 @@ class APIMatkaResultsAllView(APIView):
     Public API returning all active market results formatted according to Matka response standard.
     """
     def get(self, request):
+        record_api_hit('/api/results/all/')
         date_param = request.GET.get('date')
         market_param = request.GET.get('market')
 

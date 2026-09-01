@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Market, Result, FetchAttempt, FetchStatus
+from .models import Market, Result, FetchAttempt, FetchStatus, DailyAPIHit
 
 
 @admin.register(Market)
@@ -92,3 +92,13 @@ class FetchAttemptAdmin(admin.ModelAdmin):
         return obj.error_message[:60] + ('...' if len(obj.error_message) > 60 else '')
 
     short_error_message.short_description = 'Error Summary'
+
+
+@admin.register(DailyAPIHit)
+class DailyAPIHitAdmin(admin.ModelAdmin):
+    list_display = ('endpoint', 'hit_date', 'count', 'last_hit_at')
+    list_filter = ('endpoint', 'hit_date')
+    search_fields = ('endpoint',)
+    date_hierarchy = 'hit_date'
+    ordering = ('-hit_date', 'endpoint')
+

@@ -13,11 +13,14 @@
                 <h1 class="h3 fw-bold mb-0">Management Dashboard</h1>
             </div>
             <div class="d-flex gap-2">
+                <a href="{% url 'markets:result_manage' %}" class="btn btn-warning btn-sm rounded-pill px-3">
+                    <i class="bi bi-calendar-check me-1"></i> Manage Date Results
+                </a>
                 <a href="{% url 'markets:market_create' %}" class="btn btn-primary btn-sm rounded-pill px-3">
                     <i class="bi bi-plus-lg me-1"></i> Add Market
                 </a>
                 <a href="{% url 'markets:result_create' %}" class="btn btn-outline-info btn-sm rounded-pill px-3">
-                    <i class="bi bi-pencil-square me-1"></i> Add/Edit Result
+                    <i class="bi bi-pencil-square me-1"></i> Add Manual Result
                 </a>
             </div>
         </div>
@@ -40,28 +43,40 @@
 <section class="py-3">
     <div class="container">
         <div class="row g-3">
-            <div class="col-md-3">
+            <div class="col-md-2 col-6">
                 <div class="market-card p-3 text-center">
                     <span class="text-body-secondary small fw-bold text-uppercase d-block mb-1">Total Markets</span>
                     <span class="fs-2 fw-bold text-body">{{ stats.total_markets }}</span>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2 col-6">
                 <div class="market-card p-3 text-center">
                     <span class="text-body-secondary small fw-bold text-uppercase d-block mb-1">Active Markets</span>
                     <span class="fs-2 fw-bold text-success">{{ stats.active_markets }}</span>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2 col-6">
                 <div class="market-card p-3 text-center">
                     <span class="text-body-secondary small fw-bold text-uppercase d-block mb-1">Today's Results</span>
                     <span class="fs-2 fw-bold text-info">{{ stats.today_success }}</span>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2 col-6">
                 <div class="market-card p-3 text-center">
                     <span class="text-body-secondary small fw-bold text-uppercase d-block mb-1">Today's Failures</span>
                     <span class="fs-2 fw-bold text-danger">{{ stats.failed_attempts }}</span>
+                </div>
+            </div>
+            <div class="col-md-2 col-6">
+                <div class="market-card p-3 text-center border-warning border-opacity-25">
+                    <span class="text-warning small fw-bold text-uppercase d-block mb-1"><i class="bi bi-graph-up me-1"></i> API Hits (Today)</span>
+                    <span class="fs-2 fw-bold text-warning">{{ stats.today_api_hits }}</span>
+                </div>
+            </div>
+            <div class="col-md-2 col-6">
+                <div class="market-card p-3 text-center border-primary border-opacity-25">
+                    <span class="text-primary small fw-bold text-uppercase d-block mb-1"><i class="bi bi-activity me-1"></i> API Hits (Total)</span>
+                    <span class="fs-2 fw-bold text-primary">{{ stats.total_api_hits }}</span>
                 </div>
             </div>
         </div>

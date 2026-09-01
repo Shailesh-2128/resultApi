@@ -102,3 +102,25 @@ class FetchAttempt(models.Model):
 
     def __str__(self):
         return f"{self.market.name} - {self.result_date} [{self.result_type}]: {self.status} (Attempts: {self.attempt_count})"
+
+
+class DailyAPIHit(models.Model):
+    endpoint = models.CharField(max_length=100, help_text="API endpoint identifier e.g. /api/results/all/")
+    hit_date = models.DateField(help_text="Date of recorded API hits")
+    count = models.PositiveIntegerField(default=0, help_text="Number of requests received on hit_date")
+    last_hit_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-hit_date', 'endpoint']
+        verbose_name = 'Daily API Hit'
+        verbose_name_plural = 'Daily API Hits'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['endpoint', 'hit_date'],
+                name='unique_endpoint_hit_date'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.endpoint} ({self.hit_date}): {self.count} hits"
+
