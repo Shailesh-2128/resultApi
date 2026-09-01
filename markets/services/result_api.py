@@ -189,7 +189,7 @@ class ResultAPIClient:
 
     def _fetch_all_markets_fallback(self, external_name: str, result_date_str: str, result_type: str, headers: dict) -> dict:
         """
-        Fallback search querying market=all with 45-second cache and 5-second rate limit.
+        Fallback search querying market=all with 5-second cache timeout.
         """
         all_cache_key = f"matka_api_cache_all_{result_date_str}"
         all_data = cache.get(all_cache_key)
@@ -209,7 +209,7 @@ class ResultAPIClient:
                     data = resp.json()
                     if data.get('status') and isinstance(data.get('data'), list):
                         all_data = data['data']
-                        cache.set(all_cache_key, all_data, timeout=45)
+                        cache.set(all_cache_key, all_data, timeout=5)
             except Exception as e:
                 logger.debug(f"Fallback fetch all markets failed: {e}")
 
@@ -225,13 +225,13 @@ class ResultAPIClient:
 
     def _process_raw_result(self, raw_result: str, result_type: str, status_code: int) -> dict:
         raw_str = str(raw_result).strip() if raw_result else ''
-        if not raw_str or '*' in raw_str or raw_str.lower() in ['- -', '-', 'loading', 'loading...']:
+        if not raw_str or raw_str.lower() in ['- -', '-', 'loading', 'loading...', 'null', 'none']:
             return {
                 "success": True,
                 "available": False,
                 "result_value": None,
                 "response_status": status_code,
-                "error": "Result loading... / not declared yet by market provider"
+                "error": f"{result_type} result loading... / not declared yet by market provider"
             }
 
         parsed_val = self._parse_matka_result(raw_str, result_type)
@@ -259,24 +259,29 @@ class ResultAPIClient:
         parts = clean_raw.split('-')
 
         if result_type in ['OPEN', 'FIRST']:
-            # Open result format must strictly be 3 digits - 1 digit e.g. 234-9
+            # Open result format must be 3 digits - 1 digit e.g. 234-9
+            # Matka API can return "234-9", "234-9*", "234-9*-***", "234-99-289", "234-9**-***"
             if len(parts) >= 2:
                 p0 = parts[0].strip()
                 p1 = parts[1].strip()
-                if p0 and p1:
+                if re.match(r'^\d{3}$', p0) and p1 and re.match(r'^\d$', p1[0]):
                     candidate = f"{p0}-{p1[0]}"
-                    if re.match(r'^\d{3}-\d$', candidate):
-                        return candidate
+                    return candidate
             elif len(parts) == 1:
                 candidate = parts[0].strip()
                 if re.match(r'^\d{3}-\d$', candidate):
                     return candidate
             return None
         else:
-            # Close result format must strictly be 3 digits - 2 digits - 3 digits e.g. 234-99-289
-            candidate = clean_raw
-            if re.match(r'^\d{3}-\d{2}-\d{3}$', candidate):
-                return candidate
+            # Close result format must be 3 digits - 2 digits - 3 digits e.g. 234-99-289
+            # If string contains stars (*) or open-only result like "234-9*", it is NOT a valid close result yet
+            if len(parts) == 3:
+                p0 = parts[0].strip()
+                p1 = parts[1].strip()
+                p2 = parts[2].strip()
+                if re.match(r'^\d{3}$', p0) and re.match(r'^\d{2}$', p1) and re.match(r'^\d{3}$', p2):
+                    candidate = f"{p0}-{p1}-{p2}"
+                    return candidate
             return None
 
     def _mock_response(self, external_name: str, result_date_str: str, result_type: str) -> dict:

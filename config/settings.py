@@ -149,9 +149,9 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
-    'check-and-schedule-result-fetches-every-minute': {
+    'check-and-schedule-result-fetches-periodic': {
         'task': 'markets.tasks.check_and_schedule_result_fetches',
-        'schedule': 60.0,
+        'schedule': 15.0,
     },
 }
 

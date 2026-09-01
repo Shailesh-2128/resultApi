@@ -89,6 +89,6 @@ def fetch_market_result_task(self, market_id: int, result_date_str: str, result_
     if status in [FetchStatus.NOT_AVAILABLE, FetchStatus.FAILED, FetchStatus.TIMEOUT]:
         retry_delay = max(5, poll_interval)
         logger.info(f"Result not ready/loading for market_id={market_id} [{result_date_str} {result_type}]. Scheduling retry in {retry_delay}s")
-        raise self.retry(countdown=retry_delay)
+        raise self.retry(countdown=retry_delay, max_retries=None)
 
     return f"Fetch completed with status: {status}"

@@ -82,12 +82,18 @@ class ServiceAndTaskTestCase(TestCase):
         self.assertTrue(res_open["available"])
         self.assertEqual(res_open["result_value"], "234-9")
 
-        # Open result when API returns full close string e.g. 234-99-289 -> extracts 234-9
+        # Open result when API returns partial open string with stars e.g. 234-9*-*** -> extracts 234-9
         cache.clear()
-        mock_response.json.return_value = {"status": True, "data": [{"result": "234-99-289"}]}
-        res_open_full = client.fetch_result("test_service_mkt", "2026-08-31", "OPEN")
-        self.assertTrue(res_open_full["available"])
-        self.assertEqual(res_open_full["result_value"], "234-9")
+        mock_response.json.return_value = {"status": True, "data": [{"result": "234-9*-***"}]}
+        res_open_partial = client.fetch_result("test_service_mkt", "2026-08-31", "OPEN")
+        self.assertTrue(res_open_partial["available"])
+        self.assertEqual(res_open_partial["result_value"], "234-9")
+
+        # Close result when API returns partial open string e.g. 234-9*-*** -> Close is not available yet
+        cache.clear()
+        mock_response.json.return_value = {"status": True, "data": [{"result": "234-9*-***"}]}
+        res_close_partial = client.fetch_result("test_service_mkt", "2026-08-31", "CLOSE")
+        self.assertFalse(res_close_partial["available"])
 
         # Close result format valid: 234-99-289
         cache.clear()
