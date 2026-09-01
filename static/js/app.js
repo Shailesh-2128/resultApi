@@ -1,17 +1,56 @@
 /**
- * Auto-refresh client for Results Management application.
- * Polls internal Django REST API endpoint /api/results/today/ every 30 seconds
- * and updates DOM result cards dynamically without page reload.
+ * Auto-refresh client and Theme Toggle Manager for Results Management Application.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+    // 1. Initialize Theme Switcher (Light / Dark Mode)
+    initThemeSwitcher();
+
+    // 2. Initialize Real-Time Result Polling for Today / Home pages
     const isTodayPage = document.querySelector('[data-page="today-results"]') || document.querySelector('[data-page="home"]');
-    
     if (isTodayPage) {
-        // Poll every 30 seconds
         setInterval(fetchAndUpdateResults, 30000);
     }
 });
+
+/**
+ * Handles Light Mode / Dark Mode toggling with localStorage persistence
+ */
+function initThemeSwitcher() {
+    const savedTheme = localStorage.getItem('theme');
+    const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    // Determine active theme (default to savedTheme or light)
+    let currentTheme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+    applyTheme(currentTheme);
+
+    const toggleBtn = document.getElementById('theme-toggle-btn');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            currentTheme = (currentTheme === 'dark') ? 'light' : 'dark';
+            localStorage.setItem('theme', currentTheme);
+            applyTheme(currentTheme);
+        });
+    }
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-bs-theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+
+    const toggleIcon = document.getElementById('theme-toggle-icon');
+    const toggleText = document.getElementById('theme-toggle-text');
+
+    if (toggleIcon && toggleText) {
+        if (theme === 'dark') {
+            toggleIcon.className = 'bi bi-sun-fill text-warning';
+            toggleText.innerText = 'Light Mode';
+        } else {
+            toggleIcon.className = 'bi bi-moon-stars-fill text-primary';
+            toggleText.innerText = 'Dark Mode';
+        }
+    }
+}
 
 async function fetchAndUpdateResults() {
     const statusText = document.getElementById('live-status-text');

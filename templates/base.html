@@ -20,15 +20,23 @@
 <body>
 
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top">
+    <nav class="navbar navbar-expand-lg navbar-custom sticky-top">
         <div class="container">
             <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'markets:home' %}">
-                <i class="bi bi-graph-up-arrow text-primary"></i>
+                <i class="bi bi-graph-up-arrow text-primary fs-4"></i>
                 <span>RESULT<span class="text-primary">HUB</span></span>
             </a>
-            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
+            
+            <div class="d-flex align-items-center gap-2 d-lg-none">
+                <!-- Theme Toggle Button Mobile -->
+                <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" title="Toggle Theme">
+                    <i id="theme-toggle-icon" class="bi bi-moon-stars-fill text-primary"></i>
+                </button>
+                <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4">
                     <li class="nav-item">
@@ -52,15 +60,21 @@
                         </a>
                     </li>
                 </ul>
-                <div class="d-flex align-items-center gap-3">
-                    <span class="badge bg-dark border border-secondary text-secondary font-monospace">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <!-- Theme Toggle Button Desktop -->
+                    <button type="button" class="theme-toggle-btn d-none d-lg-inline-flex" id="theme-toggle-btn" title="Toggle Light / Dark Mode">
+                        <i id="theme-toggle-icon" class="bi bi-moon-stars-fill text-primary"></i>
+                        <span id="theme-toggle-text">Dark Mode</span>
+                    </button>
+
+                    <span class="badge bg-body-tertiary border text-body-secondary font-monospace py-2 px-3">
                         <span class="live-indicator me-1"></span>
                         <span id="live-status-text">Live Auto-Update</span>
                     </span>
                     <a href="{% url 'markets:dashboard' %}" class="btn btn-outline-primary btn-sm rounded-pill px-3">
                         <i class="bi bi-speedometer2 me-1"></i> Dashboard
                     </a>
-                    <a href="/admin/" class="btn btn-outline-light btn-sm rounded-pill px-3">
+                    <a href="/admin/" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
                         <i class="bi bi-shield-lock me-1"></i> Admin Portal
                     </a>
                 </div>
@@ -81,8 +95,8 @@
                     <span class="fw-bold">ResultHub System</span> &copy; {% now "Y" %}. All Rights Reserved.
                 </div>
                 <div class="col-md-6 text-md-end">
-                    <span class="text-secondary small me-3" id="last-updated-time">System Timezone: {{ TIME_ZONE|default:"Asia/Kolkata" }}</span>
-                    <a href="/api/results/today/" target="_blank" class="text-secondary text-decoration-none small ms-2">
+                    <span class="text-body-secondary small me-3" id="last-updated-time">System Timezone: {{ TIME_ZONE|default:"Asia/Kolkata" }}</span>
+                    <a href="/api/results/today/" target="_blank" class="text-body-secondary text-decoration-none small ms-2">
                         <i class="bi bi-code-slash me-1"></i> REST API
                     </a>
                 </div>

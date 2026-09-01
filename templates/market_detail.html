@@ -3,15 +3,15 @@
 {% block title %}{{ market.name }} History - ResultHub{% endblock %}
 
 {% block content %}
-<section class="py-4 border-bottom border-dark border-opacity-50 bg-dark bg-opacity-25">
+<section class="py-4 border-bottom bg-body-tertiary">
     <div class="container">
         <div class="d-flex align-items-center gap-3">
             <a href="{% url 'markets:market_list' %}" class="btn btn-outline-secondary btn-sm rounded-circle">
                 <i class="bi bi-arrow-left"></i>
             </a>
             <div>
-                <h1 class="h3 fw-bold text-white mb-0">{{ market.name }}</h1>
-                <p class="text-secondary small mb-0">
+                <h1 class="h3 fw-bold mb-0">{{ market.name }}</h1>
+                <p class="text-body-secondary small mb-0">
                     <span class="me-3"><i class="bi bi-clock me-1"></i> Open / Close Times: {{ market.open_time }} / {{ market.close_time }}</span>
                     <span><i class="bi bi-tag me-1"></i> Code: {{ market.external_name }}</span>
                 </p>
@@ -23,11 +23,11 @@
 <section class="py-5">
     <div class="container">
         {% if page_obj.object_list %}
-            <div class="card bg-dark border-secondary overflow-hidden">
+            <div class="card border overflow-hidden">
                 <div class="table-responsive">
-                    <table class="table table-dark table-hover align-middle mb-0">
+                    <table class="table theme-table table-hover align-middle mb-0">
                         <thead>
-                            <tr class="border-secondary text-secondary small">
+                            <tr class="small">
                                 <th class="py-3 px-4">Date</th>
                                 <th class="py-3 px-4 text-center">Open Result ({{ market.open_time }})</th>
                                 <th class="py-3 px-4 text-center">Close Result ({{ market.close_time }})</th>
@@ -35,27 +35,27 @@
                         </thead>
                         <tbody>
                             {% for item in page_obj.object_list %}
-                                <tr class="border-secondary border-opacity-50">
-                                    <td class="py-3 px-4 fw-semibold text-white">
+                                <tr>
+                                    <td class="py-3 px-4 fw-semibold text-body">
                                         <i class="bi bi-calendar-event me-2 text-primary"></i>
                                         {{ item.date|date:"d F Y (D)" }}
                                     </td>
                                     <td class="py-3 px-4 text-center">
                                         {% if item.open %}
-                                            <span class="badge bg-dark border border-info text-info font-monospace fs-6 px-3 py-2">
+                                            <span class="badge bg-body-tertiary border text-primary font-monospace fs-6 px-3 py-2">
                                                 {{ item.open }}
                                             </span>
                                         {% else %}
-                                            <span class="text-secondary small">-</span>
+                                            <span class="text-body-secondary small">-</span>
                                         {% endif %}
                                     </td>
                                     <td class="py-3 px-4 text-center">
                                         {% if item.close %}
-                                            <span class="badge bg-dark border border-info text-info font-monospace fs-6 px-3 py-2">
+                                            <span class="badge bg-body-tertiary border text-primary font-monospace fs-6 px-3 py-2">
                                                 {{ item.close }}
                                             </span>
                                         {% else %}
-                                            <span class="text-secondary small">-</span>
+                                            <span class="text-body-secondary small">-</span>
                                         {% endif %}
                                     </td>
                                 </tr>
@@ -70,28 +70,28 @@
                 <nav class="d-flex justify-content-center mt-4">
                     <ul class="pagination pagination-sm">
                         {% if page_obj.has_previous %}
-                            <li class="page-item"><a class="page-link bg-dark border-secondary text-light" href="?page={{ page_obj.previous_page_number }}">&laquo;</a></li>
+                            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">&laquo;</a></li>
                         {% endif %}
 
                         {% for num in page_obj.paginator.page_range %}
                             {% if page_obj.number == num %}
-                                <li class="page-item active"><span class="page-link bg-primary border-primary">{{ num }}</span></li>
+                                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
                             {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-                                <li class="page-item"><a class="page-link bg-dark border-secondary text-light" href="?page={{ num }}">{{ num }}</a></li>
+                                <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
                             {% endif %}
                         {% endfor %}
 
                         {% if page_obj.has_next %}
-                            <li class="page-item"><a class="page-link bg-dark border-secondary text-light" href="?page={{ page_obj.next_page_number }}">&raquo;</a></li>
+                            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">&raquo;</a></li>
                         {% endif %}
                     </ul>
                 </nav>
             {% endif %}
         {% else %}
             <div class="text-center py-5">
-                <i class="bi bi-inbox text-secondary display-4 mb-3 d-block"></i>
-                <h4 class="text-white">No Historical Results Recorded</h4>
-                <p class="text-secondary">No result declarations exist yet for this market.</p>
+                <i class="bi bi-inbox text-body-secondary display-4 mb-3 d-block"></i>
+                <h4 class="text-body fw-bold">No Historical Results Recorded</h4>
+                <p class="text-body-secondary">No result declarations exist yet for this market.</p>
             </div>
         {% endif %}
     </div>

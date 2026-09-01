@@ -1,5 +1,5 @@
 from django import forms
-from .models import Market, Result, ResultType
+from .models import Market, Result
 
 
 class MarketForm(forms.ModelForm):
@@ -14,23 +14,23 @@ class MarketForm(forms.ModelForm):
         ]
         widgets = {
             'name': forms.TextInput(attrs={
-                'class': 'form-control bg-dark border-secondary text-white',
+                'class': 'form-control theme-input',
                 'placeholder': 'e.g. Market A'
             }),
             'external_name': forms.TextInput(attrs={
-                'class': 'form-control bg-dark border-secondary text-white',
+                'class': 'form-control theme-input',
                 'placeholder': 'e.g. market_a'
             }),
             'open_time': forms.TimeInput(attrs={
-                'class': 'form-control bg-dark border-secondary text-white',
+                'class': 'form-control theme-input',
                 'type': 'time'
             }),
             'close_time': forms.TimeInput(attrs={
-                'class': 'form-control bg-dark border-secondary text-white',
+                'class': 'form-control theme-input',
                 'type': 'time'
             }),
             'is_active': forms.CheckboxInput(attrs={
-                'class': 'form-check-input bg-dark border-secondary'
+                'class': 'form-check-input'
             }),
         }
 
@@ -46,17 +46,17 @@ class ManualResultForm(forms.ModelForm):
         ]
         widgets = {
             'market': forms.Select(attrs={
-                'class': 'form-select bg-dark border-secondary text-white'
+                'class': 'form-select theme-input'
             }),
             'result_date': forms.DateInput(attrs={
-                'class': 'form-control bg-dark border-secondary text-white',
+                'class': 'form-control theme-input',
                 'type': 'date'
             }),
             'result_type': forms.Select(attrs={
-                'class': 'form-select bg-dark border-secondary text-white'
+                'class': 'form-select theme-input'
             }),
             'result_value': forms.TextInput(attrs={
-                'class': 'form-control bg-dark border-secondary text-white',
+                'class': 'form-control theme-input',
                 'placeholder': 'e.g. 170-8 or 170-89-450'
             }),
         }

@@ -1,75 +1,158 @@
-/* Custom Styling for Results Management Application */
+/* ==============================================================================
+   Universal Design System - Light Mode & Dark Mode with Full Responsiveness
+   ============================================================================== */
 
 :root {
-    --bg-dark: #0f172a;
-    --card-bg: #1e293b;
-    --card-border: #334155;
+    --bg-primary: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-surface-secondary: #f1f5f9;
+    --border-color: #e2e8f0;
+    --border-subtle: #cbd5e1;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --accent-blue: #2563eb;
+    --accent-glow: rgba(37, 99, 235, 0.15);
+    --result-box-bg: #f8fafc;
+    --result-box-border: #cbd5e1;
+    --result-text: #0284c7;
+    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    --card-shadow-hover: 0 12px 20px -5px rgba(0, 0, 0, 0.08), 0 0 15px rgba(37, 99, 235, 0.1);
+    --nav-bg: rgba(255, 255, 255, 0.92);
+    --footer-bg: #ffffff;
+    --table-header-bg: #f1f5f9;
+    --badge-success-bg: rgba(16, 185, 129, 0.12);
+    --badge-success-color: #047857;
+    --badge-success-border: rgba(16, 185, 129, 0.3);
+    --badge-waiting-bg: rgba(100, 116, 139, 0.12);
+    --badge-waiting-color: #475569;
+    --badge-waiting-border: rgba(100, 116, 139, 0.3);
+    --badge-updating-bg: rgba(37, 99, 235, 0.12);
+    --badge-updating-color: #2563eb;
+    --badge-updating-border: rgba(37, 99, 235, 0.3);
+    --badge-unavailable-bg: rgba(239, 68, 68, 0.12);
+    --badge-unavailable-color: #b91c1c;
+    --badge-unavailable-border: rgba(239, 68, 68, 0.3);
+    --input-bg: #ffffff;
+    --input-color: #0f172a;
+}
+
+[data-bs-theme="dark"] {
+    --bg-primary: #0f172a;
+    --bg-surface: #1e293b;
+    --bg-surface-secondary: #0f172a;
+    --border-color: #334155;
+    --border-subtle: #475569;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
     --accent-blue: #3b82f6;
-    --accent-glow: rgba(59, 130, 246, 0.15);
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --success-green: #10b981;
-    --warning-yellow: #f59e0b;
-    --danger-red: #ef4444;
+    --accent-glow: rgba(59, 130, 246, 0.2);
+    --result-box-bg: #0f172a;
+    --result-box-border: #334155;
+    --result-text: #38bdf8;
+    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    --card-shadow-hover: 0 12px 25px -5px rgba(0, 0, 0, 0.4), 0 0 20px var(--accent-glow);
+    --nav-bg: rgba(30, 41, 59, 0.92);
+    --footer-bg: #090d16;
+    --table-header-bg: #0f172a;
+    --badge-success-bg: rgba(16, 185, 129, 0.2);
+    --badge-success-color: #34d399;
+    --badge-success-border: rgba(16, 185, 129, 0.3);
+    --badge-waiting-bg: rgba(148, 163, 184, 0.2);
+    --badge-waiting-color: #cbd5e1;
+    --badge-waiting-border: rgba(148, 163, 184, 0.3);
+    --badge-updating-bg: rgba(59, 130, 246, 0.2);
+    --badge-updating-color: #60a5fa;
+    --badge-updating-border: rgba(59, 130, 246, 0.3);
+    --badge-unavailable-bg: rgba(239, 68, 68, 0.2);
+    --badge-unavailable-color: #f87171;
+    --badge-unavailable-border: rgba(239, 68, 68, 0.3);
+    --input-bg: #0f172a;
+    --input-color: #f8fafc;
 }
 
 body {
-    background-color: var(--bg-dark);
-    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    color: var(--text-main);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 main {
     flex: 1;
 }
 
-/* Navbar */
+/* Header & Navigation Bar */
 .navbar-custom {
-    background: rgba(30, 41, 59, 0.85);
+    background: var(--nav-bg);
     backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--card-border);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .navbar-brand {
     font-weight: 700;
     font-size: 1.25rem;
     letter-spacing: -0.025em;
+    color: var(--text-main) !important;
 }
 
 .nav-link {
-    color: var(--text-secondary) !important;
+    color: var(--text-muted) !important;
     font-weight: 500;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease;
 }
 
 .nav-link:hover, .nav-link.active {
     color: var(--accent-blue) !important;
 }
 
-/* Glassmorphism Cards */
+/* Theme Toggle Button */
+.theme-toggle-btn {
+    background: var(--bg-surface-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 6px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+/* Responsive Cards & Layouts */
 .market-card {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: var(--card-shadow);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .market-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 0 20px var(--accent-glow);
+    box-shadow: var(--card-shadow-hover);
+    border-color: var(--accent-blue);
 }
 
-/* Result Pill Display */
+/* Result Box */
 .result-box {
-    background: #0f172a;
-    border: 1px solid #334155;
+    background: var(--result-box-bg);
+    border: 1px solid var(--result-box-border);
     border-radius: 8px;
     padding: 12px 16px;
-    min-height: 64px;
+    min-height: 60px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -80,9 +163,10 @@ main {
     font-weight: 700;
     letter-spacing: 1px;
     font-family: 'JetBrains Mono', monospace;
-    color: #38bdf8;
+    color: var(--result-text);
 }
 
+/* Status Badges */
 .result-badge {
     font-size: 0.75rem;
     font-weight: 600;
@@ -92,28 +176,28 @@ main {
 }
 
 .badge-success {
-    background: rgba(16, 185, 129, 0.15);
-    color: #34d399;
-    border: 1px solid rgba(16, 185, 129, 0.3);
+    background: var(--badge-success-bg);
+    color: var(--badge-success-color);
+    border: 1px solid var(--badge-success-border);
 }
 
 .badge-waiting {
-    background: rgba(148, 163, 184, 0.15);
-    color: #cbd5e1;
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: var(--badge-waiting-bg);
+    color: var(--badge-waiting-color);
+    border: 1px solid var(--badge-waiting-border);
 }
 
 .badge-updating {
-    background: rgba(59, 130, 246, 0.15);
-    color: #60a5fa;
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: var(--badge-updating-bg);
+    color: var(--badge-updating-color);
+    border: 1px solid var(--badge-updating-border);
     animation: pulse 1.5s infinite;
 }
 
 .badge-unavailable {
-    background: rgba(239, 68, 68, 0.15);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: var(--badge-unavailable-bg);
+    color: var(--badge-unavailable-color);
+    border: 1px solid var(--badge-unavailable-border);
 }
 
 @keyframes pulse {
@@ -121,21 +205,51 @@ main {
     50% { opacity: 0.5; }
 }
 
-/* Hero & Search Header */
+/* Hero Section */
 .hero-section {
-    background: linear-gradient(180deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0) 100%);
-    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
-    padding: 3rem 0 2rem;
+    background: var(--bg-surface-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 2.5rem 0 2rem;
 }
 
-/* Live Indicator dot */
+/* Form Controls & Inputs */
+.theme-input {
+    background-color: var(--input-bg) !important;
+    color: var(--input-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+.theme-input:focus {
+    border-color: var(--accent-blue) !important;
+    box-shadow: 0 0 0 3px var(--accent-glow) !important;
+}
+
+/* Tables */
+.theme-table {
+    color: var(--text-main) !important;
+    border-color: var(--border-color) !important;
+}
+
+.theme-table th {
+    background-color: var(--table-header-bg) !important;
+    color: var(--text-muted) !important;
+    border-bottom-color: var(--border-color) !important;
+}
+
+.theme-table td {
+    background-color: var(--bg-surface) !important;
+    color: var(--text-main) !important;
+    border-bottom-color: var(--border-color) !important;
+}
+
+/* Live Dot */
 .live-indicator {
     width: 8px;
     height: 8px;
-    background-color: var(--success-green);
+    background-color: #10b981;
     border-radius: 50%;
     display: inline-block;
-    box-shadow: 0 0 8px var(--success-green);
+    box-shadow: 0 0 8px #10b981;
     animation: blink 2s infinite;
 }
 
@@ -146,9 +260,25 @@ main {
 
 /* Footer */
 footer {
-    background: #090d16;
-    border-top: 1px solid var(--card-border);
-    color: var(--text-secondary);
+    background: var(--footer-bg);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-muted);
     padding: 1.5rem 0;
     font-size: 0.875rem;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Full Responsiveness Optimizations */
+@media (max-width: 768px) {
+    .hero-section {
+        padding: 1.5rem 0;
+    }
+    
+    .result-value {
+        font-size: 1.1rem;
+    }
+
+    .market-card {
+        margin-bottom: 0.5rem;
+    }
 }
