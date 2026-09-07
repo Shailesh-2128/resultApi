@@ -12,6 +12,13 @@ class MarketForm(forms.ModelForm):
             'open_time',
             'close_time',
             'is_active',
+            'active_monday',
+            'active_tuesday',
+            'active_wednesday',
+            'active_thursday',
+            'active_friday',
+            'active_saturday',
+            'active_sunday',
         ]
         widgets = {
             'name': forms.TextInput(attrs={
@@ -33,6 +40,13 @@ class MarketForm(forms.ModelForm):
             'is_active': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
             }),
+            'active_monday': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'active_tuesday': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'active_wednesday': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'active_thursday': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'active_friday': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'active_saturday': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'active_sunday': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
 

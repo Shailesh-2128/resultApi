@@ -33,6 +33,10 @@ class ResultFetcherService:
             logger.info(f"Market '{market.name}' is inactive. Skipping fetch.")
             return {"status": FetchStatus.WAITING, "message": "Market inactive"}
 
+        if not market.is_active_on_date(result_date):
+            logger.info(f"Market '{market.name}' is inactive on date {result_date}. Skipping fetch.")
+            return {"status": FetchStatus.WAITING, "message": "Market inactive on this day"}
+
         date_str = result_date.strftime('%Y-%m-%d') if isinstance(result_date, (datetime, timezone.datetime)) else str(result_date)
 
         # 1. Idempotency Check: Stop if result already exists in database

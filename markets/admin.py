@@ -8,17 +8,44 @@ class MarketAdmin(admin.ModelAdmin):
     list_display = (
         'name',
         'external_name',
-        'slug',
         'open_time',
         'close_time',
         'is_active',
+        'active_days_summary',
         'updated_at',
     )
     list_editable = ('open_time', 'close_time', 'is_active')
-    list_filter = ('is_active',)
+    list_filter = (
+        'is_active',
+        'active_monday',
+        'active_tuesday',
+        'active_wednesday',
+        'active_thursday',
+        'active_friday',
+        'active_saturday',
+        'active_sunday',
+    )
     search_fields = ('name', 'external_name', 'slug')
     prepopulated_fields = {'slug': ('name',)}
     ordering = ('name',)
+
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'slug', 'external_name', 'open_time', 'close_time', 'is_active')
+        }),
+        ('Operating Days Schedule', {
+            'description': 'Select the days of the week on which this market scheduler should operate.',
+            'fields': (
+                ('active_monday', 'active_tuesday', 'active_wednesday', 'active_thursday'),
+                ('active_friday', 'active_saturday', 'active_sunday'),
+            )
+        }),
+    )
+
+    def active_days_summary(self, obj):
+        return obj.get_active_days_display()
+
+    active_days_summary.short_description = 'Active Days'
 
 
 @admin.register(Result)

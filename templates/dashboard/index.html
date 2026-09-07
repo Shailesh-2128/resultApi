@@ -100,6 +100,7 @@
                             <th>API Code</th>
                             <th>Open Time</th>
                             <th>Close Time</th>
+                            <th>Active Days</th>
                             <th>Status</th>
                             <th class="text-end px-4">Actions</th>
                         </tr>
@@ -115,6 +116,11 @@
                                 <td><code>{{ m.external_name }}</code></td>
                                 <td><i class="bi bi-clock me-1 text-body-secondary"></i> {{ m.open_time }}</td>
                                 <td><i class="bi bi-clock-fill me-1 text-body-secondary"></i> {{ m.close_time }}</td>
+                                <td>
+                                    <span class="badge bg-body-tertiary border text-body small">
+                                        <i class="bi bi-calendar3 me-1"></i>{{ m.get_active_days_display }}
+                                    </span>
+                                </td>
                                 <td>
                                     {% if m.is_active %}
                                         <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill">Active</span>

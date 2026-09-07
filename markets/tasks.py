@@ -28,6 +28,10 @@ def check_and_schedule_result_fetches(self):
     scheduled_count = 0
 
     for market in active_markets:
+        # Verify market is active on today's day of the week (e.g. Monday, Tuesday, etc.)
+        if not market.is_active_on_date(today_date):
+            continue
+
         # Check Open Time Schedule
         if current_time >= market.open_time:
             if _should_trigger_fetch(market, today_date, ResultType.OPEN):
@@ -47,8 +51,15 @@ def check_and_schedule_result_fetches(self):
 def _should_trigger_fetch(market, target_date, result_type: str) -> bool:
     """
     Determines whether a fetch task should be queued.
-    Returns False if result already exists in DB or if fetch is actively running right now.
+    Returns False if target_date is in the past, result already exists in DB, or fetch is running.
     """
+    current_tz = timezone.get_current_timezone()
+    today_date = timezone.now().astimezone(current_tz).date()
+
+    # Skip automatic fetching for past dates
+    if target_date < today_date:
+        return False
+
     # 1. If result exists, do not trigger
     if Result.objects.filter(market=market, result_date=target_date, result_type=result_type).exists():
         return False
@@ -71,6 +82,7 @@ def _should_trigger_fetch(market, target_date, result_type: str) -> bool:
 def fetch_market_result_task(self, market_id: int, result_date_str: str, result_type: str):
     """
     Celery background worker task for polling external API continuously for a specific result.
+    Skips retries if target_date is in the past compared to today.
     """
     logger.info(f"Executing fetch_market_result_task for market_id={market_id}, date={result_date_str}, type={result_type}")
     
@@ -79,6 +91,14 @@ def fetch_market_result_task(self, market_id: int, result_date_str: str, result_
     except ValueError:
         logger.error(f"Invalid date format: {result_date_str}")
         return "Invalid date format"
+
+    current_tz = timezone.get_current_timezone()
+    today_date = timezone.now().astimezone(current_tz).date()
+
+    # Skip fetching and retrying for past dates when today has arrived
+    if target_date < today_date:
+        logger.info(f"Target date {target_date} is before today ({today_date}). Skipping past date fetch for market_id={market_id}.")
+        return f"Skipped: target_date {target_date} is before today {today_date}"
 
     fetcher = ResultFetcherService()
     res = fetcher.process_fetch(market_id, target_date, result_type)

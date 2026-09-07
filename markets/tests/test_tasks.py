@@ -139,3 +139,42 @@ class ServiceAndTaskTestCase(TestCase):
         self.assertEqual(res["status"], FetchStatus.NOT_AVAILABLE)
         attempt.refresh_from_db()
         self.assertEqual(attempt.attempt_count, 1501)
+
+    def test_active_days_scheduling(self):
+        cache.clear()
+        # Create a market that is active ONLY on Monday (weekday=0)
+        monday_market = Market.objects.create(
+            name="Monday Only Market",
+            external_name="monday_mkt",
+            open_time=datetime.time(0, 0),
+            close_time=datetime.time(0, 0),
+            is_active=True,
+            active_monday=True,
+            active_tuesday=False,
+            active_wednesday=False,
+            active_thursday=False,
+            active_friday=False,
+            active_saturday=False,
+            active_sunday=False,
+        )
+
+        # Mock Monday (2026-09-07 is Monday)
+        monday_date = datetime.date(2026, 9, 7)
+        self.assertTrue(monday_market.is_active_on_date(monday_date))
+        self.assertEqual(monday_market.get_active_days_display(), "Mon")
+
+        # Mock Tuesday (2026-09-08 is Tuesday)
+        tuesday_date = datetime.date(2026, 9, 8)
+        self.assertFalse(monday_market.is_active_on_date(tuesday_date))
+
+        # Test process_fetch respects inactive day
+        fetcher = ResultFetcherService()
+        out_tue = fetcher.process_fetch(monday_market.id, tuesday_date, ResultType.OPEN)
+        self.assertEqual(out_tue["status"], FetchStatus.WAITING)
+        self.assertIn("inactive on this day", out_tue["message"])
+
+    def test_skip_past_date_fetching(self):
+        cache.clear()
+        yesterday_str = (timezone.now().date() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+        result = fetch_market_result_task(self.market.id, yesterday_str, ResultType.OPEN)
+        self.assertIn("Skipped", result)

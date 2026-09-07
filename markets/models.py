@@ -24,6 +24,13 @@ class Market(models.Model):
     open_time = models.TimeField(help_text="Open Result Time (HH:MM)")
     close_time = models.TimeField(help_text="Close Result Time (HH:MM)")
     is_active = models.BooleanField(default=True, help_text="Whether this market is active for result processing")
+    active_monday = models.BooleanField(default=True, verbose_name="Monday")
+    active_tuesday = models.BooleanField(default=True, verbose_name="Tuesday")
+    active_wednesday = models.BooleanField(default=True, verbose_name="Wednesday")
+    active_thursday = models.BooleanField(default=True, verbose_name="Thursday")
+    active_friday = models.BooleanField(default=True, verbose_name="Friday")
+    active_saturday = models.BooleanField(default=True, verbose_name="Saturday")
+    active_sunday = models.BooleanField(default=True, verbose_name="Sunday")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -31,6 +38,44 @@ class Market(models.Model):
         ordering = ['name']
         verbose_name = 'Market'
         verbose_name_plural = 'Markets'
+
+    def is_active_on_date(self, target_date) -> bool:
+        """Determines if the market scheduler is active on a given calendar date."""
+        if not self.is_active or not target_date:
+            return False
+        weekday = target_date.weekday()  # 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+        days_map = {
+            0: self.active_monday,
+            1: self.active_tuesday,
+            2: self.active_wednesday,
+            3: self.active_thursday,
+            4: self.active_friday,
+            5: self.active_saturday,
+            6: self.active_sunday,
+        }
+        return days_map.get(weekday, True)
+
+    def get_active_days_display(self) -> str:
+        """Returns a human-readable list or range of active operating days."""
+        days = [
+            ("Mon", self.active_monday),
+            ("Tue", self.active_tuesday),
+            ("Wed", self.active_wednesday),
+            ("Thu", self.active_thursday),
+            ("Fri", self.active_friday),
+            ("Sat", self.active_saturday),
+            ("Sun", self.active_sunday),
+        ]
+        active_names = [name for name, is_on in days if is_on]
+        if len(active_names) == 7:
+            return "All Days"
+        elif len(active_names) == 0:
+            return "None"
+        elif active_names == ["Mon", "Tue", "Wed", "Thu", "Fri"]:
+            return "Mon - Fri"
+        elif active_names == ["Sat", "Sun"]:
+            return "Sat - Sun"
+        return ", ".join(active_names)
 
     def save(self, *args, **kwargs):
         if not self.slug:
