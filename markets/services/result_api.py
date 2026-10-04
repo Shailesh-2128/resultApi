@@ -4,6 +4,11 @@ import time
 import requests
 from django.conf import settings
 from django.core.cache import cache
+import socket
+import urllib3.util.connection as urllib3_conn
+
+# Force urllib3 to resolve IPv4 addresses to match dashboard IPv4 whitelist rules
+urllib3_conn.allowed_gai_family = lambda: socket.AF_INET
 
 logger = logging.getLogger('markets')
 
@@ -44,6 +49,56 @@ class ResultAPIClient:
             time.sleep(wait_time)
 
         _last_request_timestamp = time.time()
+
+    def _parse_response_json(self, response):
+        """
+        Parses JSON from HTTP response. Handles third-party API issues where PHP warnings,
+        notices, HTML tags, BOMs, or extra text are prepended or appended to JSON responses.
+        Returns tuple (data_dict_or_list_or_None, error_message_str_or_None).
+        """
+        raw_text = response.text if response is not None else ""
+        if not raw_text or not raw_text.strip():
+            return None, "Empty response body from Matka API"
+
+        # 1. Direct JSON parse
+        try:
+            return response.json(), None
+        except Exception:
+            pass
+
+        # 2. Extract JSON payload substring (handles PHP warnings/notices printed before JSON)
+        text = raw_text.strip()
+        first_brace = text.find('{')
+        first_bracket = text.find('[')
+
+        indices = [i for i in (first_brace, first_bracket) if i != -1]
+        if indices:
+            start = min(indices)
+            last_brace = text.rfind('}')
+            last_bracket = text.rfind(']')
+            end = max(last_brace, last_bracket)
+
+            if end > start:
+                json_candidate = text[start:end + 1]
+                try:
+                    import json
+                    parsed = json.loads(json_candidate)
+                    logger.info("Successfully extracted and parsed embedded JSON from API response containing extra text/warnings")
+                    return parsed, None
+                except Exception as err:
+                    logger.warning(f"Failed to parse extracted JSON candidate: {err}")
+
+        # 3. Handle HTML error pages (e.g. Cloudflare / Nginx 403 / WAF / Server Error)
+        if any(tag in text.lower() for tag in ['<html', '<body', '<title', '<br']):
+            match = re.search(r'<title>(.*?)</title>', text, re.IGNORECASE | re.DOTALL)
+            if match:
+                clean_title = match.group(1).strip()
+                return None, f"Matka API returned HTML page: '{clean_title}'"
+            return None, "Matka API returned HTML instead of JSON"
+
+        # 4. Fallback snippet error
+        snippet = text[:100].replace('\n', ' ').strip()
+        return None, f"Invalid JSON response from Matka API: '{snippet}'"
 
     def fetch_result(self, external_name: str, result_date_str: str, result_type: str) -> dict:
         """
@@ -104,16 +159,15 @@ class ResultAPIClient:
                 }
 
             if status_code == 200:
-                try:
-                    data = response.json()
-                except ValueError as json_err:
-                    logger.error(f"Invalid JSON returned from Matka API: {json_err}")
+                data, json_error = self._parse_response_json(response)
+                if not data:
+                    logger.error(f"Invalid JSON returned from Matka API for market={clean_market_code}: {json_error}")
                     return {
                         "success": False,
                         "available": False,
                         "result_value": None,
                         "response_status": status_code,
-                        "error": f"Invalid JSON response: {str(json_err)}"
+                        "error": json_error or "Invalid JSON response from Matka API"
                     }
 
                 msg = str(data.get('message', '')).lower()
@@ -147,15 +201,25 @@ class ResultAPIClient:
                     return fallback_res
 
                 msg_str = data.get('message') or "Result not declared yet"
+                your_ip = data.get('your_ip')
+                allowed_ip = data.get('allowed_ip')
+                if your_ip and allowed_ip:
+                    msg_str = f"{msg_str} (Your Server IP: {your_ip}, Whitelisted IP: {allowed_ip})"
+
+                is_auth_or_config_err = not api_status and any(
+                    k in msg_str.lower() for k in ['ip', 'domain', 'key', 'whitelist', 'invalid', 'denied', 'unauthorized']
+                )
+
                 res_dict = {
-                    "success": True,
+                    "success": False if is_auth_or_config_err else True,
                     "available": False,
                     "result_value": None,
                     "response_status": status_code,
                     "error": f"Matka API: {msg_str}"
                 }
-                # Cache negative response for 5s to match 5-second polling interval
-                cache.set(cache_key, res_dict, timeout=5)
+                if not is_auth_or_config_err:
+                    # Cache negative response for 5s to match 5-second polling interval
+                    cache.set(cache_key, res_dict, timeout=5)
                 return res_dict
 
             else:
@@ -206,8 +270,8 @@ class ResultAPIClient:
             try:
                 resp = self.session.get(self.api_url, headers=headers, params=params, timeout=self.timeout)
                 if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get('status') and isinstance(data.get('data'), list):
+                    data, _ = self._parse_response_json(resp)
+                    if data and data.get('status') and isinstance(data.get('data'), list):
                         all_data = data['data']
                         cache.set(all_cache_key, all_data, timeout=5)
             except Exception as e:

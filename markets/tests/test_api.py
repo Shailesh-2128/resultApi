@@ -97,3 +97,57 @@ class MarketAPITestCase(APITestCase):
         res = self.client.post(del_url)
         self.assertEqual(res.status_code, 302)
         self.assertFalse(Market.objects.filter(pk=self.market.pk).exists())
+
+
+class ResultAPIClientParsingTestCase(APITestCase):
+    def setUp(self):
+        from unittest.mock import MagicMock
+        from markets.services.result_api import ResultAPIClient
+        self.client_instance = ResultAPIClient(api_url="https://www.matkaapi.com/mapi/market_api.php", api_key="testkey", api_domain="quebix.in")
+
+    def test_parse_json_with_php_warning_prefix(self):
+        from unittest.mock import patch, MagicMock
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = (
+            '<br />\n<b>Warning</b>: fopen(/cache/flood.json): Permission denied in <b>mapi_protect.php</b> on line 75<br />\n'
+            '{"status":true,"message":"success","data":[{"name":"SRIDEVI","result":"234-9"}]}'
+        )
+        mock_resp.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+
+        with patch.object(self.client_instance.session, 'get', return_value=mock_resp):
+            res = self.client_instance.fetch_result("SRIDEVI", "2026-10-04", "OPEN")
+            self.assertTrue(res['success'])
+            self.assertTrue(res['available'])
+            self.assertEqual(res['result_value'], "234-9")
+
+    def test_parse_ip_whitelist_error_with_php_warning(self):
+        from unittest.mock import patch, MagicMock
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = (
+            '<br />\n<b>Warning</b>: fopen(/cache/flood.json): Permission denied in <b>mapi_protect.php</b> line 75<br />\n'
+            '{"status":false,"message":"Please update your IP from dashboard","your_ip":"2401:4900:891f::1","allowed_ip":"212.38.94.69"}'
+        )
+        mock_resp.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+
+        with patch.object(self.client_instance.session, 'get', return_value=mock_resp):
+            res = self.client_instance.fetch_result("SRIDEVI", "2026-10-04", "OPEN")
+            self.assertFalse(res['success'])
+            self.assertFalse(res['available'])
+            self.assertIn("Please update your IP from dashboard", res['error'])
+            self.assertIn("Your Server IP: 2401:4900:891f::1", res['error'])
+            self.assertIn("Whitelisted IP: 212.38.94.69", res['error'])
+
+    def test_parse_html_error_page(self):
+        from unittest.mock import patch, MagicMock
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "<html><head><title>403 Forbidden</title></head><body>Access Denied</body></html>"
+        mock_resp.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+
+        with patch.object(self.client_instance.session, 'get', return_value=mock_resp):
+            res = self.client_instance.fetch_result("SRIDEVI", "2026-10-04", "OPEN")
+            self.assertFalse(res['success'])
+            self.assertIn("403 Forbidden", res['error'])
+
