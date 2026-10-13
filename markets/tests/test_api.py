@@ -151,3 +151,102 @@ class ResultAPIClientParsingTestCase(APITestCase):
             self.assertFalse(res['success'])
             self.assertIn("403 Forbidden", res['error'])
 
+
+class MatkaWebhookClientTestCase(APITestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        from markets.services.result_api import ResultAPIClient
+        self.client = ResultAPIClient(
+            api_url="https://matkawebhook.matkaapi.net/market-data",
+            webhook_data_url="https://matkawebhook.matkaapi.net/market-data",
+            webhook_token_url="https://matkawebhook.matkaapi.net/get-refresh-token",
+            username="7769971133",
+            password="123"
+        )
+
+    def test_webhook_fetch_result_open_and_close(self):
+        from unittest.mock import patch, MagicMock
+        from django.core.cache import cache
+
+        # Pre-seed cached token
+        cache.set("matka_webhook_refresh_token", "mock_token_123", timeout=3600)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = '{"status":true,"message":"success","today_result":[{"market_name":"PADMAVATHI","aankdo_open":"150","figure_open":"6","aankdo_close":null,"figure_close":"","jodi":""}],"refresh_token":"mock_next_token"}'
+        mock_resp.json.return_value = {
+            "status": True,
+            "message": "success",
+            "today_result": [{
+                "market_name": "PADMAVATHI",
+                "aankdo_open": "150",
+                "figure_open": "6",
+                "aankdo_close": None,
+                "figure_close": "",
+                "jodi": ""
+            }],
+            "refresh_token": "mock_next_token"
+        }
+
+        with patch.object(self.client.session, 'post', return_value=mock_resp):
+            # Test OPEN: Should be declared as 150-6
+            res_open = self.client.fetch_result("PADMAVATHI", "2026-10-13", "OPEN")
+            self.assertTrue(res_open['success'])
+            self.assertTrue(res_open['available'])
+            self.assertEqual(res_open['result_value'], "150-6")
+
+            # Check that rotated refresh token was saved to cache
+            self.assertEqual(cache.get("matka_webhook_refresh_token"), "mock_next_token")
+
+            # Test CLOSE: Close figure is null, should be available=False
+            cache.delete("matka_api_cache_padmavathi_2026-10-13_CLOSE")
+            res_close = self.client.fetch_result("PADMAVATHI", "2026-10-13", "CLOSE")
+            self.assertTrue(res_close['success'])
+            self.assertFalse(res_close['available'])
+            self.assertIn("CLOSE result not declared yet", res_close['error'])
+
+    def test_webhook_token_recovery_on_invalid_token(self):
+        from unittest.mock import patch, MagicMock
+        from django.core.cache import cache
+
+        cache.set("matka_webhook_refresh_token", "expired_token", timeout=3600)
+
+        # 1st call to market-data fails with token invalid
+        resp_invalid = MagicMock()
+        resp_invalid.status_code = 200
+        resp_invalid.json.return_value = {"status": False, "message": "Somthing wrong or token not valid"}
+        resp_invalid.text = '{"status":false,"message":"Somthing wrong or token not valid"}'
+
+        # call to get-refresh-token returns new token
+        resp_token = MagicMock()
+        resp_token.status_code = 200
+        resp_token.json.return_value = {"status": True, "message": "success", "refresh_token": "renewed_token_999"}
+        resp_token.text = '{"status":true,"message":"success","refresh_token":"renewed_token_999"}'
+
+        # 2nd call to market-data succeeds
+        resp_success = MagicMock()
+        resp_success.status_code = 200
+        resp_success.json.return_value = {
+            "status": True,
+            "message": "success",
+            "today_result": [{
+                "market_name": "PADMAVATHI",
+                "aankdo_open": "227",
+                "figure_open": "1",
+                "aankdo_close": "440",
+                "figure_close": "8",
+                "jodi": "18"
+            }],
+            "refresh_token": "final_token_111"
+        }
+        resp_success.text = '{"status":true,"message":"success"}'
+
+        with patch.object(self.client.session, 'post', side_effect=[resp_invalid, resp_token, resp_success]):
+            res = self.client.fetch_result("PADMAVATHI", "2026-10-12", "CLOSE")
+            self.assertTrue(res['success'])
+            self.assertTrue(res['available'])
+            self.assertEqual(res['result_value'], "227-18-440")
+            self.assertEqual(cache.get("matka_webhook_refresh_token"), "final_token_111")
+
+

@@ -136,6 +136,12 @@ else:
 RESULT_API_KEY = config('RESULT_API_KEY', default='')
 RESULT_API_DOMAIN = config('RESULT_API_DOMAIN', default='')
 
+# Matka Webhook API (Rotating Token Auth)
+MATKA_API_USERNAME = config('MATKA_API_USERNAME', default='7769971133')
+MATKA_API_PASSWORD = config('MATKA_API_PASSWORD', default='123')
+MATKA_API_TOKEN_URL = config('MATKA_API_TOKEN_URL', default='https://matkawebhook.matkaapi.net/get-refresh-token')
+MATKA_API_DATA_URL = config('MATKA_API_DATA_URL', default='https://matkawebhook.matkaapi.net/market-data')
+
 # Polling Rules
 RESULT_POLL_INTERVAL = config('RESULT_POLL_INTERVAL', default=5, cast=int)
 RESULT_MAX_POLL_MINUTES = config('RESULT_MAX_POLL_MINUTES', default=None, cast=lambda v: int(v) if v else None)
