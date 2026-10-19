@@ -69,11 +69,10 @@ def _should_trigger_fetch(market, target_date, result_type: str) -> bool:
     if attempt:
         if attempt.status == FetchStatus.SUCCESS:
             return False
-        # Avoid queuing duplicate tasks if fetch is actively running right now within poll interval
-        if attempt.status == FetchStatus.FETCHING:
-            poll_interval = getattr(settings, 'RESULT_POLL_INTERVAL', 5)
-            if attempt.last_attempt_at and (timezone.now() - attempt.last_attempt_at).total_seconds() < poll_interval:
-                return False
+        # Avoid queuing duplicate tasks if fetch was attempted or active within poll interval
+        poll_interval = getattr(settings, 'RESULT_POLL_INTERVAL', 5)
+        if attempt.last_attempt_at and (timezone.now() - attempt.last_attempt_at).total_seconds() < poll_interval:
+            return False
 
     return True
 
@@ -106,9 +105,23 @@ def fetch_market_result_task(self, market_id: int, result_date_str: str, result_
     status = res.get('status')
     poll_interval = getattr(settings, 'RESULT_POLL_INTERVAL', 5)
 
-    if status in [FetchStatus.NOT_AVAILABLE, FetchStatus.FAILED, FetchStatus.TIMEOUT]:
+    if status == FetchStatus.NOT_AVAILABLE:
         retry_delay = max(5, poll_interval)
-        logger.info(f"Result not ready/loading for market_id={market_id} [{result_date_str} {result_type}]. Scheduling retry in {retry_delay}s")
+        logger.info(f"Result not ready for market_id={market_id} [{result_date_str} {result_type}]. Scheduling retry in {retry_delay}s")
         raise self.retry(countdown=retry_delay, max_retries=None)
+
+    elif status == FetchStatus.FAILED:
+        msg = str(res.get('message', '')).lower()
+        if any(k in msg for k in ['ip', 'whitelist', 'key', 'domain', 'unauthorized', 'forbidden', 'denied']):
+            logger.error(f"Configuration/IP Whitelisting error for market_id={market_id}: {res.get('message')}. Stopping immediate retry loop.")
+            return f"Fetch halted: {res.get('message')}"
+        else:
+            retry_delay = max(10, poll_interval * 2)
+            logger.warning(f"Fetch failed for market_id={market_id}. Scheduling backoff retry in {retry_delay}s")
+            raise self.retry(countdown=retry_delay, max_retries=None)
+
+    elif status == FetchStatus.TIMEOUT:
+        logger.warning(f"Fetch polling timed out for market_id={market_id} [{result_date_str} {result_type}]. No further retries.")
+        return f"Fetch timed out: {res.get('message')}"
 
     return f"Fetch completed with status: {status}"

@@ -14,6 +14,7 @@ from .models import Market, Result, FetchAttempt, FetchStatus, ResultType, Daily
 from .serializers import MarketSerializer, ResultSerializer, MarketDayResultsSerializer
 from .forms import MarketForm, ManualResultForm
 from .tasks import fetch_market_result_task
+from .services.result_api import is_market_name_match, normalize_market_name
 
 
 def get_current_app_date():
@@ -552,15 +553,25 @@ class APIMatkaResultsAllView(APIView):
         markets = Market.objects.filter(is_active=True).order_by('name')
 
         if market_param and market_param.lower() != 'all':
-            clean_q = market_param.lower().replace(' ', '').replace('-', '')
-            filtered_markets = []
-            for m in markets:
-                clean_m = m.name.lower().replace(' ', '').replace('-', '')
-                clean_ext = m.external_name.lower().replace(' ', '').replace('-', '')
-                clean_slug = m.slug.lower().replace('-', '')
-                if clean_q in clean_m or clean_q in clean_ext or clean_q in clean_slug:
-                    filtered_markets.append(m)
-            markets = filtered_markets
+            norm_q = normalize_market_name(market_param)
+            # Pass 1: Prioritize exact normalized match
+            exact_matches = [
+                m for m in markets
+                if norm_q in (
+                    normalize_market_name(m.name),
+                    normalize_market_name(m.external_name),
+                    normalize_market_name(m.slug)
+                )
+            ]
+            if exact_matches:
+                markets = exact_matches
+            else:
+                # Pass 2: Collision-safe token match (preventing SRIDEVI vs SRIDEVI NIGHT collision)
+                filtered_markets = [
+                    m for m in markets
+                    if is_market_name_match(market_param, m.name) or is_market_name_match(market_param, m.external_name)
+                ]
+                markets = filtered_markets
 
         results = Result.objects.filter(result_date=target_date).select_related('market')
         results_map = {(r.market_id, r.result_type): r.result_value for r in results}

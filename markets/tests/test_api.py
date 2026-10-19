@@ -151,6 +151,88 @@ class ResultAPIClientParsingTestCase(APITestCase):
             self.assertFalse(res['success'])
             self.assertIn("403 Forbidden", res['error'])
 
+    def test_query_params_and_headers_sent(self):
+        from unittest.mock import patch, MagicMock
+        from django.core.cache import cache
+        cache.clear()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "status": True,
+            "message": "success",
+            "data": [{"name": "PADMAVATHI MORNING", "result": "150-6"}]
+        }
+        mock_resp.text = '{"status":true,"data":[{"name":"PADMAVATHI MORNING","result":"150-6"}]}'
+
+        with patch.object(self.client_instance.session, 'get', return_value=mock_resp) as mock_get:
+            res = self.client_instance.fetch_result("Padmavathi Morning", "2026-10-13", "OPEN")
+            self.assertTrue(res['available'])
+            self.assertEqual(res['result_value'], "150-6")
+            
+            mock_get.assert_called_once()
+            args, kwargs = mock_get.call_args
+            params = kwargs['params']
+            self.assertEqual(params['market'], 'padmavathimorning')
+            self.assertEqual(params['domain_key'], 'testkey')
+            self.assertEqual(params['domain'], 'quebix.in')
+            self.assertEqual(params['date'], '2026-10-13')
+
+    def test_rate_limit_429_and_flood_response(self):
+        from unittest.mock import patch, MagicMock
+        from django.core.cache import cache
+        cache.clear()
+
+        # HTTP 429
+        mock_429 = MagicMock()
+        mock_429.status_code = 429
+        mock_429.text = "Too Many Requests"
+        with patch.object(self.client_instance.session, 'get', return_value=mock_429):
+            res = self.client_instance.fetch_result("PADMAVATHI", "2026-10-13", "OPEN")
+            self.assertFalse(res['success'])
+            self.assertEqual(res['response_status'], 429)
+
+        cache.clear()
+        # 200 with flood message in body
+        mock_flood = MagicMock()
+        mock_flood.status_code = 200
+        mock_flood.text = '{"status":false,"message":"Please wait 10 sec gap between requests"}'
+        mock_flood.json.return_value = {"status": False, "message": "Please wait 10 sec gap between requests"}
+        with patch.object(self.client_instance.session, 'get', return_value=mock_flood):
+            res = self.client_instance.fetch_result("PADMAVATHI", "2026-10-13", "OPEN")
+            self.assertFalse(res['success'])
+            self.assertEqual(res['response_status'], 429)
+            self.assertIn("10 sec gap", res['error'])
+
+    def test_fallback_all_markets_query(self):
+        from unittest.mock import patch, MagicMock
+        from django.core.cache import cache
+        cache.clear()
+
+        # 1st call for single market returns empty data
+        resp_single = MagicMock()
+        resp_single.status_code = 200
+        resp_single.json.return_value = {"status": True, "message": "success", "data": []}
+        resp_single.text = '{"status":true,"data":[]}'
+
+        # 2nd call for market=all returns list including target market
+        resp_all = MagicMock()
+        resp_all.status_code = 200
+        resp_all.json.return_value = {
+            "status": True,
+            "message": "success",
+            "data": [
+                {"name": "KALYAN NIGHT", "result": "227-18-440"},
+                {"name": "SRIDEVI", "result": "123-6"}
+            ]
+        }
+        resp_all.text = '{"status":true}'
+
+        with patch.object(self.client_instance.session, 'get', side_effect=[resp_single, resp_all]) as mock_get:
+            res = self.client_instance.fetch_result("Kalyan-Night", "2026-10-13", "CLOSE")
+            self.assertTrue(res['available'])
+            self.assertEqual(res['result_value'], "227-18-440")
+            self.assertEqual(mock_get.call_count, 2)
+
 
 class MatkaWebhookClientTestCase(APITestCase):
     def setUp(self):
@@ -248,5 +330,169 @@ class MatkaWebhookClientTestCase(APITestCase):
             self.assertTrue(res['available'])
             self.assertEqual(res['result_value'], "227-18-440")
             self.assertEqual(cache.get("matka_webhook_refresh_token"), "final_token_111")
+
+
+class MarketCollisionPreventionTestCase(APITestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        from markets.services.result_api import ResultAPIClient
+        self.client_instance = ResultAPIClient(api_url="https://www.matkaapi.com/mapi/market_api.php", api_key="testkey", api_domain="quebix.in")
+
+    def test_is_market_name_match_prevent_collisions(self):
+        from markets.services.result_api import is_market_name_match
+
+        # Sridevi vs Sridevi Night
+        self.assertTrue(is_market_name_match("sridevi", "SRIDEVI"))
+        self.assertTrue(is_market_name_match("sridevi_night", "SRIDEVI NIGHT"))
+        self.assertTrue(is_market_name_match("sridevi-night", "SRIDEVI NIGHT"))
+        self.assertFalse(is_market_name_match("sridevi", "SRIDEVI NIGHT"))
+        self.assertFalse(is_market_name_match("sridevi_night", "SRIDEVI"))
+
+        # Kalyan vs Kalyan Night
+        self.assertTrue(is_market_name_match("kalyan", "KALYAN"))
+        self.assertTrue(is_market_name_match("kalyan_night", "KALYAN NIGHT"))
+        self.assertFalse(is_market_name_match("kalyan", "KALYAN NIGHT"))
+        self.assertFalse(is_market_name_match("kalyan_night", "KALYAN"))
+
+        # Milan Day vs Milan Night vs Milan Morning
+        self.assertFalse(is_market_name_match("milan_day", "MILAN NIGHT"))
+        self.assertFalse(is_market_name_match("milan_morning", "MILAN DAY"))
+        self.assertFalse(is_market_name_match("milan_morning", "MILAN NIGHT"))
+        self.assertTrue(is_market_name_match("milan_day", "MILAN DAY"))
+
+        # Rajdhani Day vs Rajdhani Night
+        self.assertFalse(is_market_name_match("rajdhani_day", "RAJDHANI NIGHT"))
+        self.assertFalse(is_market_name_match("rajdhani_night", "RAJDHANI DAY"))
+
+        # Time Bazar vs Main Bazar
+        self.assertFalse(is_market_name_match("time_bazar", "MAIN BAZAR"))
+        self.assertFalse(is_market_name_match("main_bazar", "TIME BAZAR"))
+
+    def test_fallback_matches_sridevi_when_sridevi_night_is_first(self):
+        from unittest.mock import patch, MagicMock
+        from django.core.cache import cache
+        cache.clear()
+
+        resp_single = MagicMock()
+        resp_single.status_code = 200
+        resp_single.json.return_value = {"status": True, "message": "success", "data": []}
+        resp_single.text = '{"status":true,"data":[]}'
+
+        # In all_data, SRIDEVI NIGHT is listed BEFORE SRIDEVI
+        resp_all = MagicMock()
+        resp_all.status_code = 200
+        resp_all.json.return_value = {
+            "status": True,
+            "message": "success",
+            "data": [
+                {"name": "SRIDEVI NIGHT", "result": "345-28-440"},
+                {"name": "SRIDEVI", "result": "123-68-150"}
+            ]
+        }
+        resp_all.text = '{"status":true}'
+
+        with patch.object(self.client_instance.session, 'get', side_effect=[resp_single, resp_all]):
+            # Querying SRIDEVI must return SRIDEVI (123-6), NEVER SRIDEVI NIGHT (345-2)!
+            res = self.client_instance.fetch_result("sridevi", "2026-10-19", "OPEN")
+            self.assertTrue(res['available'])
+            self.assertEqual(res['result_value'], "123-6")
+
+    def test_fallback_matches_sridevi_night_when_sridevi_is_first(self):
+        from unittest.mock import patch, MagicMock
+        from django.core.cache import cache
+        cache.clear()
+
+        resp_single = MagicMock()
+        resp_single.status_code = 200
+        resp_single.json.return_value = {"status": True, "message": "success", "data": []}
+        resp_single.text = '{"status":true,"data":[]}'
+
+        # In all_data, SRIDEVI is listed BEFORE SRIDEVI NIGHT
+        resp_all = MagicMock()
+        resp_all.status_code = 200
+        resp_all.json.return_value = {
+            "status": True,
+            "message": "success",
+            "data": [
+                {"name": "SRIDEVI", "result": "123-68-150"},
+                {"name": "SRIDEVI NIGHT", "result": "345-28-440"}
+            ]
+        }
+        resp_all.text = '{"status":true}'
+
+        with patch.object(self.client_instance.session, 'get', side_effect=[resp_single, resp_all]):
+            # Querying SRIDEVI NIGHT must return SRIDEVI NIGHT (345-2), NEVER SRIDEVI (123-6)!
+            res = self.client_instance.fetch_result("sridevi_night", "2026-10-19", "OPEN")
+            self.assertTrue(res['available'])
+            self.assertEqual(res['result_value'], "345-2")
+
+    def test_single_market_rejects_colliding_name_in_data_list(self):
+        from unittest.mock import patch, MagicMock
+        from django.core.cache import cache
+        cache.clear()
+
+        # Third-party single market endpoint incorrectly returned SRIDEVI NIGHT when asked for sridevi
+        resp_single = MagicMock()
+        resp_single.status_code = 200
+        resp_single.json.return_value = {
+            "status": True,
+            "message": "success",
+            "data": [{"name": "SRIDEVI NIGHT", "result": "345-28-440"}]
+        }
+        resp_single.text = '{"status":true}'
+
+        # Fallback queries market=all and returns both
+        resp_all = MagicMock()
+        resp_all.status_code = 200
+        resp_all.json.return_value = {
+            "status": True,
+            "message": "success",
+            "data": [
+                {"name": "SRIDEVI NIGHT", "result": "345-28-440"},
+                {"name": "SRIDEVI", "result": "123-68-150"}
+            ]
+        }
+        resp_all.text = '{"status":true}'
+
+        with patch.object(self.client_instance.session, 'get', side_effect=[resp_single, resp_all]):
+            res = self.client_instance.fetch_result("sridevi", "2026-10-19", "OPEN")
+            # Should reject SRIDEVI NIGHT from single endpoint and correctly find SRIDEVI from fallback
+            self.assertTrue(res['available'])
+            self.assertEqual(res['result_value'], "123-6")
+
+    def test_api_results_all_sridevi_filter_does_not_return_sridevi_night(self):
+        import datetime
+        from markets.models import Market
+        Market.objects.all().delete()
+        m_sridevi = Market.objects.create(
+            name="SRIDEVI",
+            external_name="sridevi",
+            open_time=datetime.time(11, 30),
+            close_time=datetime.time(12, 30),
+            is_active=True
+        )
+        m_sridevi_night = Market.objects.create(
+            name="SRIDEVI NIGHT",
+            external_name="sridevi_night",
+            open_time=datetime.time(19, 0),
+            close_time=datetime.time(20, 0),
+            is_active=True
+        )
+
+        # Querying market=sridevi must ONLY return SRIDEVI, not SRIDEVI NIGHT
+        url_sridevi = reverse('api:api_results_all') + '?market=sridevi'
+        res_sridevi = self.client.get(url_sridevi)
+        self.assertEqual(res_sridevi.status_code, 200)
+        names = [item['name'] for item in res_sridevi.data['data']]
+        self.assertEqual(names, ["SRIDEVI"])
+
+        # Querying market=sridevi_night must ONLY return SRIDEVI NIGHT
+        url_night = reverse('api:api_results_all') + '?market=sridevi_night'
+        res_night = self.client.get(url_night)
+        self.assertEqual(res_night.status_code, 200)
+        names_night = [item['name'] for item in res_night.data['data']]
+        self.assertEqual(names_night, ["SRIDEVI NIGHT"])
+
 
 

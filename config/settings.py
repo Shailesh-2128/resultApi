@@ -131,12 +131,16 @@ REST_FRAMEWORK = {
 # External API Configuration
 if TESTING:
     RESULT_API_URL = 'https://api.example.com/v1/results'
+    PASSWORD_HASHERS = [
+        'django.contrib.auth.hashers.MD5PasswordHasher',
+    ]
 else:
-    RESULT_API_URL = config('RESULT_API_URL', default='')
-RESULT_API_KEY = config('RESULT_API_KEY', default='')
-RESULT_API_DOMAIN = config('RESULT_API_DOMAIN', default='')
+    RESULT_API_URL = config('RESULT_API_URL', default='https://www.matkaapi.com/mapi/market_api.php')
 
-# Matka Webhook API (Rotating Token Auth)
+RESULT_API_KEY = config('RESULT_API_KEY', default='6dc0d710909e4710a1df481c6e095be8')
+RESULT_API_DOMAIN = config('RESULT_API_DOMAIN', default='quebix.in')
+
+# Matka Webhook API (Rotating Token Auth - Optional / Secondary)
 MATKA_API_USERNAME = config('MATKA_API_USERNAME', default='7769971133')
 MATKA_API_PASSWORD = config('MATKA_API_PASSWORD', default='123')
 MATKA_API_TOKEN_URL = config('MATKA_API_TOKEN_URL', default='https://matkawebhook.matkaapi.net/get-refresh-token')

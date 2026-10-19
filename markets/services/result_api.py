@@ -14,17 +14,81 @@ logger = logging.getLogger('markets')
 
 _last_request_timestamp = 0.0
 
+# Session modifiers that define distinct, non-overlapping market sessions
+SESSION_MODIFIERS = {'night', 'day', 'morning', 'noon', 'afternoon', 'evening'}
+GENERIC_WORDS = {'matka', 'market', 'satta', 'api', 'result', 'game'}
+
+
+def normalize_market_name(name: str) -> str:
+    """Normalize a market name by stripping all non-alphanumeric characters and lowercasing."""
+    if not name:
+        return ""
+    return re.sub(r'[^a-z0-9]', '', str(name).lower())
+
+
+def extract_market_tokens(name: str) -> set:
+    """Extract individual words/tokens from a market name."""
+    if not name:
+        return set()
+    return set(re.findall(r'[a-z0-9]+', str(name).lower()))
+
+
+def is_market_name_match(target_name: str, candidate_name: str) -> bool:
+    """
+    Determines whether candidate_name is a valid match for target_name.
+    Strictly prevents market collisions (e.g., 'SRIDEVI' vs 'SRIDEVI NIGHT',
+    'KALYAN' vs 'KALYAN NIGHT', 'MILAN DAY' vs 'MILAN NIGHT').
+    """
+    if not target_name or not candidate_name:
+        return False
+
+    norm_target = normalize_market_name(target_name)
+    norm_candidate = normalize_market_name(candidate_name)
+
+    # 1. Exact normalized match (e.g. 'sridevinight' == 'sridevinight', 'kalyan' == 'kalyan')
+    if norm_target == norm_candidate:
+        return True
+
+    tokens_target = extract_market_tokens(target_name)
+    tokens_candidate = extract_market_tokens(candidate_name)
+
+    # 2. Exact token set match (e.g. 'kalyan night' == 'night kalyan')
+    if tokens_target == tokens_candidate:
+        return True
+
+    # 3. CRITICAL COLLISION GUARD:
+    # If one market has a session modifier (e.g., 'night', 'day', 'morning', 'evening')
+    # and the other does not, or they have conflicting session modifiers, they MUST NOT match!
+    target_sessions = tokens_target.intersection(SESSION_MODIFIERS)
+    candidate_sessions = tokens_candidate.intersection(SESSION_MODIFIERS)
+
+    if target_sessions != candidate_sessions:
+        # e.g. target is 'SRIDEVI' (no modifier), candidate is 'SRIDEVI NIGHT' ('night') -> Never match!
+        return False
+
+    # 4. If session modifiers match exactly, check if remaining non-generic tokens match
+    diff_tokens = (tokens_target ^ tokens_candidate) - GENERIC_WORDS
+    if not diff_tokens:
+        return True
+
+    return False
+
 
 class ResultAPIClient:
     """
     Client for interacting with external Matka APIs:
-    1. Primary: Matka Webhook API (https://matkawebhook.matkaapi.net/market-data)
-       - Authenticates with username and password via /get-refresh-token.
-       - Automates rotating token lifecycle (each call caches the new refresh token).
-       - Self-heals if token expires or is rejected.
-       - Extracts exact 3-digit and 1-digit open/close figures (e.g. 150-6 or 227-18-440).
-    2. Legacy / Fallback: Matka API (https://www.matkaapi.com/mapi/market_api.php)
-       - Maintained for backward compatibility and test suite fixtures.
+    1. Primary: Matka API (https://www.matkaapi.com/mapi/market_api.php)
+       - Authenticates with domain_key + domain + strict server IP whitelisting.
+       - Enforces minimum 5-second interval rate-limiting lock.
+       - Caches valid declared results for 45 seconds (matching provider cache window).
+       - Caches negative/pending responses for 5 seconds to match polling intervals.
+       - Strict regex format validation for OPEN (3-1) and CLOSE (3-2-3).
+       - Robust embedded JSON extraction for polluted PHP notices/warnings.
+       - Automatic fallback to market=all with name normalization.
+       - Diagnostic detection and reporting of IP whitelisting mismatches.
+    2. Secondary: Matka Webhook API (https://matkawebhook.matkaapi.net/market-data)
+       - Active only if RESULT_API_URL explicitly contains 'matkawebhook'.
+       - Uses rotating refresh token flow.
     """
 
     def __init__(
@@ -39,9 +103,9 @@ class ResultAPIClient:
         connect_timeout=5,
         read_timeout=10
     ):
-        self.api_url = api_url or getattr(settings, 'RESULT_API_URL', '')
-        self.api_key = api_key or getattr(settings, 'RESULT_API_KEY', '')
-        self.api_domain = api_domain or getattr(settings, 'RESULT_API_DOMAIN', '')
+        self.api_url = api_url or getattr(settings, 'RESULT_API_URL', 'https://www.matkaapi.com/mapi/market_api.php')
+        self.api_key = api_key or getattr(settings, 'RESULT_API_KEY', '6dc0d710909e4710a1df481c6e095be8')
+        self.api_domain = api_domain or getattr(settings, 'RESULT_API_DOMAIN', 'quebix.in')
 
         self.webhook_data_url = webhook_data_url or getattr(settings, 'MATKA_API_DATA_URL', 'https://matkawebhook.matkaapi.net/market-data')
         self.webhook_token_url = webhook_token_url or getattr(settings, 'MATKA_API_TOKEN_URL', 'https://matkawebhook.matkaapi.net/get-refresh-token')
@@ -52,13 +116,8 @@ class ResultAPIClient:
         self.session = requests.Session()
 
     def is_webhook_mode(self) -> bool:
-        """Determines whether to use the new rotating-token webhook API."""
-        if self.api_url:
-            if 'matkawebhook' in self.api_url:
-                return True
-            if 'matkaapi.com' in self.api_url or 'live-api.com' in self.api_url or 'example.com' in self.api_url:
-                return False
-        return bool(self.webhook_data_url and self.username and self.password)
+        """Determines whether to use the rotating-token webhook API."""
+        return bool(self.api_url and 'matkawebhook' in self.api_url)
 
     def _enforce_rate_limit(self):
         """Enforces a minimum interval between outbound API calls to prevent flooding."""
@@ -230,14 +289,22 @@ class ResultAPIClient:
         if not all_results and data.get('old_result'):
             all_results = data.get('old_result', [])
 
-        target_clean = external_name.lower().replace(' ', '').replace('-', '')
+        norm_target = normalize_market_name(external_name)
         matched_item = None
 
+        # Pass 1: Exact normalized match
         for item in all_results:
-            m_name = str(item.get('market_name', '')).lower().replace(' ', '').replace('-', '')
-            if m_name == target_clean or target_clean in m_name or m_name in target_clean:
+            if norm_target == normalize_market_name(item.get('market_name', '')):
                 matched_item = item
                 break
+
+        # Pass 2: Collision-safe token match (strictly enforcing session modifiers)
+        if not matched_item:
+            for item in all_results:
+                candidate_name = item.get('market_name', '')
+                if is_market_name_match(external_name, candidate_name):
+                    matched_item = item
+                    break
 
         if not matched_item:
             return {
@@ -306,14 +373,14 @@ class ResultAPIClient:
             logger.info(f"API client in mock/dev mode for market='{external_name}' date='{result_date_str}' type='{result_type}'")
             return self._mock_response(external_name, result_date_str, result_type)
 
-        clean_market_code = external_name.lower().replace(' ', '').replace('-', '')
+        clean_market_code = str(external_name).strip().lower().replace(' ', '').replace('-', '').replace('_', '')
         cache_key = f"matka_api_cache_{clean_market_code}_{result_date_str}_{result_type.upper()}"
         cached_res = cache.get(cache_key)
         if cached_res:
             logger.info(f"Returning cached Matka API result for market={clean_market_code}, type={result_type}")
             return cached_res
 
-        # 1. Primary: Matka Webhook API Flow
+        # 1. Secondary: Matka Webhook API Flow (if explicitly configured)
         if self.is_webhook_mode():
             logger.info(f"Fetching from Matka Webhook API for market={clean_market_code}, date={result_date_str}, type={result_type}")
             data, status_code, err = self.fetch_webhook_market_data(external_name, result_date_str)
@@ -334,7 +401,7 @@ class ResultAPIClient:
                 cache.set(cache_key, res_dict, timeout=5)
             return res_dict
 
-        # 2. Legacy / Fallback: GET Request Flow
+        # 2. Primary: Matka API (https://www.matkaapi.com/mapi/market_api.php) Flow
         self._enforce_rate_limit()
 
         params = {
@@ -351,6 +418,9 @@ class ResultAPIClient:
             'User-Agent': 'ResultsManagementSystem/1.0',
         }
 
+        masked_key = (self.api_key[:4] + '***') if self.api_key else ''
+        logger.info(f"Calling Matka API {self.api_url} for market={clean_market_code}, date={result_date_str}, domain={self.api_domain}")
+
         try:
             response = self.session.get(
                 self.api_url,
@@ -361,17 +431,19 @@ class ResultAPIClient:
             status_code = response.status_code
 
             if status_code == 429:
+                logger.warning(f"Rate limited (429) by Matka API for market={clean_market_code}")
                 return {
                     "success": False,
                     "available": False,
                     "result_value": None,
                     "response_status": 429,
-                    "error": "Rate limited by Matka API. Retrying shortly."
+                    "error": "Rate limited by Matka API (5-10s gap required). Retrying shortly."
                 }
 
             if status_code == 200:
                 data, json_error = self._parse_response_json(response)
                 if not data:
+                    logger.error(f"Invalid JSON returned from Matka API for market={clean_market_code}: {json_error}")
                     return {
                         "success": False,
                         "available": False,
@@ -381,7 +453,8 @@ class ResultAPIClient:
                     }
 
                 msg = str(data.get('message', '')).lower()
-                if 'rate_limited' in msg or '10 sec gap' in msg or 'flood' in msg:
+                if any(x in msg for x in ['rate_limited', '10 sec gap', '5 sec gap', 'flood', 'too many requests']):
+                    logger.warning(f"Rate limit / Flood message in response body: {msg}")
                     return {
                         "success": False,
                         "available": False,
@@ -393,25 +466,45 @@ class ResultAPIClient:
                 api_status = data.get('status', False)
                 data_list = data.get('data', [])
 
+                matched_item = None
                 if api_status and isinstance(data_list, list) and len(data_list) > 0:
-                    market_item = data_list[0]
-                    raw_result = market_item.get('result', '').strip()
+                    norm_target = normalize_market_name(external_name)
+                    # Pass 1: Exact normalized match or single-market response where API omitted name field
+                    for item in data_list:
+                        item_name = str(item.get('name') or '').strip()
+                        if not item_name or norm_target == normalize_market_name(item_name):
+                            matched_item = item
+                            break
+                    # Pass 2: Collision-safe token match (preventing SRIDEVI vs SRIDEVI NIGHT collision)
+                    if not matched_item:
+                        for item in data_list:
+                            item_name = str(item.get('name') or '').strip()
+                            if item_name and is_market_name_match(external_name, item_name):
+                                matched_item = item
+                                break
+
+                if matched_item:
+                    raw_result = matched_item.get('result', '').strip()
                     res_dict = self._process_raw_result(raw_result, result_type, status_code)
                     if res_dict.get('available'):
                         cache.set(cache_key, res_dict, timeout=45)
+                    else:
+                        cache.set(cache_key, res_dict, timeout=5)
                     return res_dict
 
-                # Legacy Fallback: Query market=all
+                # Fallback: Query market=all to find market with collision-safe matching
                 fallback_res = self._fetch_all_markets_fallback(external_name, result_date_str, result_type, headers)
                 if fallback_res.get('available'):
                     cache.set(cache_key, fallback_res, timeout=45)
                     return fallback_res
 
+                # Check diagnostics for IP whitelisting or auth failure
                 msg_str = data.get('message') or "Result not declared yet"
                 your_ip = data.get('your_ip')
                 allowed_ip = data.get('allowed_ip')
                 if your_ip and allowed_ip:
                     msg_str = f"{msg_str} (Your Server IP: {your_ip}, Whitelisted IP: {allowed_ip})"
+                    logger.error(f"Matka API IP Whitelist Mismatch: Outbound IP={your_ip}, Whitelisted IP={allowed_ip}")
 
                 is_auth_or_config_err = not api_status and any(
                     k in msg_str.lower() for k in ['ip', 'domain', 'key', 'whitelist', 'invalid', 'denied', 'unauthorized']
@@ -437,24 +530,30 @@ class ResultAPIClient:
             }
 
         except requests.exceptions.Timeout:
+            logger.error(f"Timeout calling Matka API for market={clean_market_code}")
             return {
                 "success": False,
                 "available": False,
                 "result_value": None,
-                "response_status": None,
+                "response_status": 504,
                 "error": "Matka API connection/read timeout"
             }
         except requests.exceptions.RequestException as req_err:
+            logger.error(f"Network request error calling Matka API for market={clean_market_code}: {req_err}")
             return {
                 "success": False,
                 "available": False,
                 "result_value": None,
-                "response_status": None,
+                "response_status": 502,
                 "error": f"Connection error: {str(req_err)}"
             }
 
     def _fetch_all_markets_fallback(self, external_name: str, result_date_str: str, result_type: str, headers: dict) -> dict:
-        """Fallback search querying legacy market=all."""
+        """
+        Fallback search querying market=all with 5-second cache timeout.
+        Uses collision-safe market matching to guarantee markets like 'SRIDEVI' and
+        'SRIDEVI NIGHT' never collapse or match each other.
+        """
         all_cache_key = f"matka_api_cache_all_{result_date_str}"
         all_data = cache.get(all_cache_key)
 
@@ -463,6 +562,8 @@ class ResultAPIClient:
             params = {'market': 'all', 'domain_key': self.api_key}
             if self.api_domain:
                 params['domain'] = self.api_domain
+            if result_date_str:
+                params['date'] = result_date_str
 
             try:
                 resp = self.session.get(self.api_url, headers=headers, params=params, timeout=self.timeout)
@@ -475,14 +576,24 @@ class ResultAPIClient:
                 logger.debug(f"Fallback fetch all markets failed: {e}")
 
         if all_data:
-            target_name_clean = external_name.lower().replace(' ', '').replace('-', '')
+            norm_target = normalize_market_name(external_name)
+            # Pass 1: Look for exact normalized match first
             for item in all_data:
-                item_name_clean = item.get('name', '').lower().replace(' ', '').replace('-', '')
-                if target_name_clean in item_name_clean or item_name_clean in target_name_clean:
+                norm_item = normalize_market_name(item.get('name', ''))
+                if norm_target == norm_item:
                     raw_result = item.get('result', '').strip()
+                    logger.info(f"Fallback exact match found for market '{external_name}' -> '{item.get('name')}'")
                     return self._process_raw_result(raw_result, result_type, 200)
 
-        return {"success": True, "available": False, "result_value": None, "response_status": 200, "error": "Not found"}
+            # Pass 2: Look for collision-safe token match (strictly enforcing session modifiers)
+            for item in all_data:
+                candidate_name = item.get('name', '')
+                if is_market_name_match(external_name, candidate_name):
+                    raw_result = item.get('result', '').strip()
+                    logger.info(f"Fallback token match found for market '{external_name}' -> '{candidate_name}'")
+                    return self._process_raw_result(raw_result, result_type, 200)
+
+        return {"success": True, "available": False, "result_value": None, "response_status": 200, "error": f"Market '{external_name}' not found in Matka API market=all list"}
 
     def _process_raw_result(self, raw_result: str, result_type: str, status_code: int) -> dict:
         raw_str = str(raw_result).strip() if raw_result else ''

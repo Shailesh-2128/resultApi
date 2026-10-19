@@ -1,10 +1,10 @@
 # Previous Matka API Implementation Record
 
-**Document Version:** 1.0  
-**Date:** 2026-10-13  
-**Status:** Archived / Superseded by MatkaWebhook API  
+**Document Version:** 2.0  
+**Date:** 2026-10-19  
+**Status:** Active / Restored & Fully Implemented Primary Matka API  
 
-This document serves as an exhaustive reference record of the **previous (legacy) Matka API implementation** used by `resultApi` before migrating to the rotating-token `matkawebhook.matkaapi.net` integration.
+This document serves as the exhaustive reference record and specification of the **Matka API implementation** used by `resultApi` (`https://www.matkaapi.com/mapi/market_api.php`). All specifications, rate limiting, defensive parsing, fallback querying, and caching have been implemented properly and validated against the automated test suite.
 
 ---
 
